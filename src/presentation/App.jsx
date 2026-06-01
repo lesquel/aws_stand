@@ -20,6 +20,7 @@ import { Stars } from './components/ui-kit';
 import { PixelSprite } from './components/sprites';
 import { ToastHost, showToast } from './feedback/toast';
 import { fireConfetti } from './feedback/confetti';
+import { setSoundEnabled, primeAudio, playClick, playSuccess, playUnlock, playPrize } from './feedback/sound';
 import { useTweaks, TweaksPanel, TweakSection, TweakRadio, TweakToggle, TweakButton } from './components/tweaks-panel';
 import { Landing, Register } from './screens/onboard';
 import { MapScreen, StandScreen, AvatarScreen } from './screens/core';
@@ -30,13 +31,15 @@ const IN_APP = ['home', 'stand', 'avatar', 'badges', 'prizes'];
 const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
   "lang": "es",
   "heroLayout": "center",
-  "scanlines": true
+  "scanlines": true,
+  "sound": true
 }/*EDITMODE-END*/;
 
 export default function App() {
   const saved = load();
   const [t, setTweak] = useTweaks(TWEAK_DEFAULTS);
   const lang = t.lang, scanlines = t.scanlines, heroLayout = t.heroLayout;
+  const soundOn = t.sound;
   const setLang = l => setTweak('lang', l);
   const [player, setPlayer] = useState(saved?.player || null);
   const [progress, setProgress] = useState(saved?.progress || emptyProgress());
@@ -47,6 +50,20 @@ export default function App() {
   useEffect(() => {
     save({ player, progress });
   }, [player, progress]);
+
+  // keep the sound engine in sync with the tweak
+  useEffect(() => { setSoundEnabled(soundOn); }, [soundOn]);
+
+  // blip on any button press (delegated: one listener covers every button)
+  useEffect(() => {
+    function onClickSound(e) {
+      primeAudio();
+      const btn = e.target.closest ? e.target.closest('button') : null;
+      if (btn && !btn.disabled) playClick();
+    }
+    document.addEventListener('click', onClickSound);
+    return () => document.removeEventListener('click', onClickSound);
+  }, []);
 
   // expose hooks for verifier / host
   useEffect(() => {
@@ -81,6 +98,7 @@ export default function App() {
     if (rewards.piece) showToast({ title: tx(T('¡Pieza nueva!', 'New piece!')), sub: tx(PIECES[rewards.piece].name), sprite: PIECES[rewards.piece].sprite, dur: 3200 });
     rewards.badges.forEach(bid => { const b = badgeById(bid); showToast({ title: tx(T('¡Insignia!', 'Badge!')), sub: tx(b.name), sprite: b.icon, dur: 3200 }); });
     if (!rewards.piece && !rewards.badges.length) fireConfetti({ count: 40, y: .5 });
+    if (rewards.piece) playUnlock(); else playSuccess();
 
     return { tickets: rewards.tickets, piece: rewards.piece, badges: rewards.badges };
   }
@@ -93,6 +111,7 @@ export default function App() {
     setProgress(np);
     fireConfetti({ count: 90, colors: ['#ffd23f', '#ff9900', '#fff'] });
     showToast({ title: pz.raffle ? tx(T('¡Inscrito al sorteo!', 'Entered raffle!')) : tx(T('¡Premio canjeado!', 'Prize claimed!')), sub: tx(pz.name), sprite: pz.sprite, dur: 3000 });
+    playPrize();
   }
 
   const actions = { complete, claim };
@@ -122,6 +141,13 @@ export default function App() {
     <div className={'stage ' + (scanlines ? 'scanlines' : 'scanlines off')}>
       <Stars />
 
+      {/* sound on/off (usable in production, unlike the Tweaks panel) */}
+      <button onClick={() => setTweak('sound', !soundOn)} className="pixel"
+        aria-label={soundOn ? 'Mute sound' : 'Unmute sound'}
+        style={{ position: 'fixed', top: 12, right: 76, zIndex: 60, fontSize: 11, padding: '6px 9px', cursor: 'pointer', border: '2px solid var(--line)', background: 'rgba(19,26,43,.9)', color: soundOn ? 'var(--orange)' : 'var(--ink-3)' }}>
+        {soundOn ? '🔊' : '🔇'}
+      </button>
+
       {/* global language toggle */}
       <div style={{ position: 'fixed', top: 12, right: 12, zIndex: 60, display: 'flex', gap: 0, border: '2px solid var(--line)', background: 'rgba(19,26,43,.9)' }}>
         {['es', 'en'].map(l => (
@@ -137,7 +163,7 @@ export default function App() {
           <div className="brand" style={{ cursor: 'pointer' }} onClick={() => nav('home')}>
             <PixelSprite layers={['ic_cloud']} scale={1.6} /> CLOUD<b>QUEST</b>
           </div>
-          <div className="coin" style={{ fontSize: 11, marginRight: 64 }}>
+          <div className="coin" style={{ fontSize: 11, marginRight: 116 }}>
             <PixelSprite layers={['ticket']} scale={1.8} /> {progress.tickets}
           </div>
         </div>
@@ -174,6 +200,9 @@ export default function App() {
         <TweakSection label={tx(T('Pantalla', 'Screen'))} />
         <TweakToggle label={tx(T('Scanlines CRT', 'CRT scanlines'))} value={scanlines}
           onChange={v => setTweak('scanlines', v)} />
+        <TweakSection label={tx(T('Sonido', 'Sound'))} />
+        <TweakToggle label={tx(T('Efectos de sonido', 'Sound effects'))} value={soundOn}
+          onChange={v => setTweak('sound', v)} />
         <TweakSection label={tx(T('Datos', 'Data'))} />
         <TweakButton label={tx(T('Reiniciar mi progreso', 'Reset my progress'))}
           onClick={() => { clear(); location.reload(); }} />

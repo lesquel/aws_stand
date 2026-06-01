@@ -121,11 +121,13 @@ const __TWEAKS_STYLE = `
 `;
 
 // ── useTweaks ───────────────────────────────────────────────────────────────
-export function useTweaks(defaults) {
-  const [values, setValues] = React.useState(defaults);
-  const setTweak = React.useCallback((keyOrEdits, val) => {
-    const edits = typeof keyOrEdits === 'object' && keyOrEdits !== null
-      ? keyOrEdits : { [keyOrEdits]: val };
+export function useTweaks<T extends Record<string, unknown>>(
+  defaults: T
+): [T, (keyOrEdits: keyof T | Partial<T>, val?: unknown) => void] {
+  const [values, setValues] = React.useState<T>(defaults);
+  const setTweak = React.useCallback((keyOrEdits: keyof T | Partial<T>, val?: unknown) => {
+    const edits: Partial<T> = typeof keyOrEdits === 'object' && keyOrEdits !== null
+      ? (keyOrEdits as Partial<T>) : { [keyOrEdits]: val } as Partial<T>;
     setValues((prev) => ({ ...prev, ...edits }));
     window.parent.postMessage({ type: '__edit_mode_set_keys', edits }, '*');
     window.dispatchEvent(new CustomEvent('tweakchange', { detail: edits }));
@@ -134,9 +136,10 @@ export function useTweaks(defaults) {
 }
 
 // ── TweaksPanel ─────────────────────────────────────────────────────────────
-export function TweaksPanel({ title = 'Tweaks', children }) {
+interface TweaksPanelProps { title?: string; children?: React.ReactNode; }
+export function TweaksPanel({ title = 'Tweaks', children }: TweaksPanelProps) {
   const [open, setOpen] = React.useState(false);
-  const dragRef = React.useRef(null);
+  const dragRef = React.useRef<HTMLDivElement>(null);
   const offsetRef = React.useRef({ x: 16, y: 16 });
   const PAD = 16;
 
@@ -167,7 +170,7 @@ export function TweaksPanel({ title = 'Tweaks', children }) {
   }, [open, clampToViewport]);
 
   React.useEffect(() => {
-    const onMsg = (e) => {
+    const onMsg = (e: MessageEvent) => {
       const t = e?.data?.type;
       if (t === '__activate_edit_mode') setOpen(true);
       else if (t === '__deactivate_edit_mode') setOpen(false);
@@ -182,14 +185,14 @@ export function TweaksPanel({ title = 'Tweaks', children }) {
     window.parent.postMessage({ type: '__edit_mode_dismissed' }, '*');
   };
 
-  const onDragStart = (e) => {
+  const onDragStart = (e: React.MouseEvent<HTMLDivElement>) => {
     const panel = dragRef.current;
     if (!panel) return;
     const r = panel.getBoundingClientRect();
     const sx = e.clientX, sy = e.clientY;
     const startRight = window.innerWidth - r.right;
     const startBottom = window.innerHeight - r.bottom;
-    const move = (ev) => {
+    const move = (ev: MouseEvent) => {
       offsetRef.current = {
         x: startRight - (ev.clientX - sx),
         y: startBottom - (ev.clientY - sy),
@@ -226,7 +229,8 @@ export function TweaksPanel({ title = 'Tweaks', children }) {
 
 // ── Layout helpers ──────────────────────────────────────────────────────────
 
-export function TweakSection({ label, children }) {
+interface TweakSectionProps { label?: React.ReactNode; children?: React.ReactNode; }
+export function TweakSection({ label, children }: TweakSectionProps) {
   return (
     <>
       <div className="twk-sect">{label}</div>
@@ -235,7 +239,8 @@ export function TweakSection({ label, children }) {
   );
 }
 
-export function TweakRow({ label, value, children, inline = false }) {
+interface TweakRowProps { label?: React.ReactNode; value?: React.ReactNode; children?: React.ReactNode; inline?: boolean; }
+export function TweakRow({ label, value, children, inline = false }: TweakRowProps) {
   return (
     <div className={inline ? 'twk-row twk-row-h' : 'twk-row'}>
       <div className="twk-lbl">
@@ -249,7 +254,8 @@ export function TweakRow({ label, value, children, inline = false }) {
 
 // ── Controls ────────────────────────────────────────────────────────────────
 
-export function TweakSlider({ label, value, min = 0, max = 100, step = 1, unit = '', onChange }) {
+interface TweakSliderProps { label: string; value: number; min?: number; max?: number; step?: number; unit?: string; onChange: (v: number) => void; }
+export function TweakSlider({ label, value, min = 0, max = 100, step = 1, unit = '', onChange }: TweakSliderProps) {
   return (
     <TweakRow label={label} value={`${value}${unit}`}>
       <input type="range" className="twk-slider" min={min} max={max} step={step}
@@ -258,7 +264,8 @@ export function TweakSlider({ label, value, min = 0, max = 100, step = 1, unit =
   );
 }
 
-export function TweakToggle({ label, value, onChange }) {
+interface TweakToggleProps { label: string; value: boolean; onChange: (v: boolean) => void; }
+export function TweakToggle({ label, value, onChange }: TweakToggleProps) {
   return (
     <div className="twk-row twk-row-h">
       <div className="twk-lbl"><span>{label}</span></div>
@@ -269,39 +276,46 @@ export function TweakToggle({ label, value, onChange }) {
   );
 }
 
-export function TweakRadio({ label, value, options, onChange }) {
-  const trackRef = React.useRef(null);
+// TweakRadio: options can be string|number|{ value, label } — pragmatic any for the generic control
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type TweakOption = string | number | { value: any; label: any };
+interface TweakRadioProps { label: string; value: unknown; options: TweakOption[]; onChange: (v: unknown) => void; }
+export function TweakRadio({ label, value, options, onChange }: TweakRadioProps) {
+  const trackRef = React.useRef<HTMLDivElement>(null);
   const [dragging, setDragging] = React.useState(false);
   const valueRef = React.useRef(value);
   valueRef.current = value;
 
-  const labelLen = (o) => String(typeof o === 'object' ? o.label : o).length;
-  const maxLen = options.reduce((m, o) => Math.max(m, labelLen(o)), 0);
-  const fitsAsSegments = maxLen <= ({ 2: 16, 3: 10 }[options.length] ?? 0);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const labelLen = (o: TweakOption): number => String(typeof o === 'object' ? (o as { label: unknown }).label : o).length;
+  const maxLen = options.reduce((m: number, o) => Math.max(m, labelLen(o)), 0);
+  const fitsAsSegments = maxLen <= (({ 2: 16, 3: 10 } as Record<number, number>)[options.length] ?? 0);
   if (!fitsAsSegments) {
-    const resolve = (s) => {
-      const m = options.find((o) => String(typeof o === 'object' ? o.value : o) === s);
-      return m === undefined ? s : typeof m === 'object' ? m.value : m;
+    const resolve = (s: string) => {
+      const m = options.find((o) => String(typeof o === 'object' ? (o as { value: unknown }).value : o) === s);
+      return m === undefined ? s : typeof m === 'object' ? (m as { value: unknown }).value : m;
     };
     return <TweakSelect label={label} value={value} options={options}
-                        onChange={(s) => onChange(resolve(s))} />;
+                        onChange={(s) => onChange(resolve(String(s)))} />;
   }
-  const opts = options.map((o) => (typeof o === 'object' ? o : { value: o, label: o }));
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const opts = options.map((o) => (typeof o === 'object' ? o as { value: any; label: any } : { value: o, label: o }));
   const idx = Math.max(0, opts.findIndex((o) => o.value === value));
   const n = opts.length;
 
-  const segAt = (clientX) => {
+  const segAt = (clientX: number) => {
+    if (!trackRef.current) return opts[0].value;
     const r = trackRef.current.getBoundingClientRect();
     const inner = r.width - 4;
     const i = Math.floor(((clientX - r.left - 2) / inner) * n);
     return opts[Math.max(0, Math.min(n - 1, i))].value;
   };
 
-  const onPointerDown = (e) => {
+  const onPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
     setDragging(true);
     const v0 = segAt(e.clientX);
     if (v0 !== valueRef.current) onChange(v0);
-    const move = (ev) => {
+    const move = (ev: PointerEvent) => {
       if (!trackRef.current) return;
       const v = segAt(ev.clientX);
       if (v !== valueRef.current) onChange(v);
@@ -323,8 +337,8 @@ export function TweakRadio({ label, value, options, onChange }) {
              style={{ left: `calc(2px + ${idx} * (100% - 4px) / ${n})`,
                       width: `calc((100% - 4px) / ${n})` }} />
         {opts.map((o) => (
-          <button key={o.value} type="button" role="radio" aria-checked={o.value === value}>
-            {o.label}
+          <button key={String(o.value)} type="button" role="radio" aria-checked={o.value === value}>
+            {String(o.label)}
           </button>
         ))}
       </div>
@@ -332,21 +346,23 @@ export function TweakRadio({ label, value, options, onChange }) {
   );
 }
 
-export function TweakSelect({ label, value, options, onChange }) {
+interface TweakSelectProps { label: string; value: unknown; options: TweakOption[]; onChange: (v: unknown) => void; }
+export function TweakSelect({ label, value, options, onChange }: TweakSelectProps) {
   return (
     <TweakRow label={label}>
-      <select className="twk-field" value={value} onChange={(e) => onChange(e.target.value)}>
+      <select className="twk-field" value={String(value)} onChange={(e) => onChange(e.target.value)}>
         {options.map((o) => {
-          const v = typeof o === 'object' ? o.value : o;
-          const l = typeof o === 'object' ? o.label : o;
-          return <option key={v} value={v}>{l}</option>;
+          const v = typeof o === 'object' ? (o as { value: unknown }).value : o;
+          const l = typeof o === 'object' ? (o as { label: unknown }).label : o;
+          return <option key={String(v)} value={String(v)}>{String(l)}</option>;
         })}
       </select>
     </TweakRow>
   );
 }
 
-export function TweakText({ label, value, placeholder, onChange }) {
+interface TweakTextProps { label: string; value: string; placeholder?: string; onChange: (v: string) => void; }
+export function TweakText({ label, value, placeholder, onChange }: TweakTextProps) {
   return (
     <TweakRow label={label}>
       <input className="twk-field" type="text" value={value} placeholder={placeholder}
@@ -355,18 +371,19 @@ export function TweakText({ label, value, placeholder, onChange }) {
   );
 }
 
-export function TweakNumber({ label, value, min, max, step = 1, unit = '', onChange }) {
-  const clamp = (n) => {
+interface TweakNumberProps { label: string; value: number; min?: number; max?: number; step?: number; unit?: string; onChange: (v: number) => void; }
+export function TweakNumber({ label, value, min, max, step = 1, unit = '', onChange }: TweakNumberProps) {
+  const clamp = (n: number) => {
     if (min != null && n < min) return min;
     if (max != null && n > max) return max;
     return n;
   };
   const startRef = React.useRef({ x: 0, val: 0 });
-  const onScrubStart = (e) => {
+  const onScrubStart = (e: React.PointerEvent<HTMLSpanElement>) => {
     e.preventDefault();
     startRef.current = { x: e.clientX, val: value };
     const decimals = (String(step).split('.')[1] || '').length;
-    const move = (ev) => {
+    const move = (ev: PointerEvent) => {
       const dx = ev.clientX - startRef.current.x;
       const raw = startRef.current.val + dx * step;
       const snapped = Math.round(raw / step) * step;
@@ -389,7 +406,7 @@ export function TweakNumber({ label, value, min, max, step = 1, unit = '', onCha
   );
 }
 
-function __twkIsLight(hex) {
+function __twkIsLight(hex: unknown): boolean {
   const h = String(hex).replace('#', '');
   const x = h.length === 3 ? h.replace(/./g, (c) => c + c) : h.padEnd(6, '0');
   const n = parseInt(x.slice(0, 6), 16);
@@ -398,7 +415,7 @@ function __twkIsLight(hex) {
   return r * 299 + g * 587 + b * 114 > 148000;
 }
 
-const __TwkCheck = ({ light }) => (
+const __TwkCheck = ({ light }: { light: boolean }) => (
   <svg viewBox="0 0 14 14" aria-hidden="true">
     <path d="M3 7.2 5.8 10 11 4.2" fill="none" strokeWidth="2.2"
           strokeLinecap="round" strokeLinejoin="round"
@@ -406,7 +423,10 @@ const __TwkCheck = ({ light }) => (
   </svg>
 );
 
-export function TweakColor({ label, value, options, onChange }) {
+// TweakColor: options can be string | string[] — pragmatic any for color values
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+interface TweakColorProps { label: string; value: any; options?: any[]; onChange: (v: any) => void; }
+export function TweakColor({ label, value, options, onChange }: TweakColorProps) {
   if (!options || !options.length) {
     return (
       <div className="twk-row twk-row-h">
@@ -416,13 +436,15 @@ export function TweakColor({ label, value, options, onChange }) {
       </div>
     );
   }
-  const key = (o) => String(JSON.stringify(o)).toLowerCase();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const key = (o: any) => String(JSON.stringify(o)).toLowerCase();
   const cur = key(value);
   return (
     <TweakRow label={label}>
       <div className="twk-chips" role="radiogroup">
-        {options.map((o, i) => {
-          const colors = Array.isArray(o) ? o : [o];
+        {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
+        {options.map((o: any, i: number) => {
+          const colors: string[] = Array.isArray(o) ? o : [o];
           const [hero, ...rest] = colors;
           const sup = rest.slice(0, 4);
           const on = key(o) === cur;
@@ -434,7 +456,7 @@ export function TweakColor({ label, value, options, onChange }) {
                     onClick={() => onChange(o)}>
               {sup.length > 0 && (
                 <span>
-                  {sup.map((c, j) => <i key={j} style={{ background: c }} />)}
+                  {sup.map((c: string, j: number) => <i key={j} style={{ background: c }} />)}
                 </span>
               )}
               {on && <__TwkCheck light={__twkIsLight(hero)} />}
@@ -446,7 +468,8 @@ export function TweakColor({ label, value, options, onChange }) {
   );
 }
 
-export function TweakButton({ label, onClick, secondary = false }) {
+interface TweakButtonProps { label: string; onClick: () => void; secondary?: boolean; }
+export function TweakButton({ label, onClick, secondary = false }: TweakButtonProps) {
   return (
     <button type="button" className={secondary ? 'twk-btn secondary' : 'twk-btn'}
             onClick={onClick}>{label}</button>

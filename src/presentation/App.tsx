@@ -25,6 +25,7 @@ import { useTweaks, TweaksPanel, TweakSection, TweakRadio, TweakToggle, TweakBut
 import { Landing, Register } from './screens/onboard';
 import { MapScreen, StandScreen, AvatarScreen } from './screens/core';
 import { BadgesScreen, PrizesScreen, ScannerScreen, DashboardScreen } from './screens/meta';
+import type { Lang, Progress, Player, CompleteResult, Localized } from '../domain/types';
 
 const IN_APP = ['home', 'stand', 'avatar', 'badges', 'prizes'];
 
@@ -38,13 +39,13 @@ const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
 export default function App() {
   const saved = load();
   const [t, setTweak] = useTweaks(TWEAK_DEFAULTS);
-  const lang = t.lang, scanlines = t.scanlines, heroLayout = t.heroLayout;
-  const soundOn = t.sound;
-  const setLang = l => setTweak('lang', l);
-  const [player, setPlayer] = useState(saved?.player || null);
-  const [progress, setProgress] = useState(saved?.progress || emptyProgress());
-  const [route, setRoute] = useState({ screen: 'landing', params: {} });
-  const tx = o => o[lang];
+  const lang = t.lang as Lang, scanlines = t.scanlines as boolean, heroLayout = t.heroLayout as string;
+  const soundOn = t.sound as boolean;
+  const setLang = (l: string) => setTweak('lang', l);
+  const [player, setPlayer] = useState<Player | null>(saved?.player || null);
+  const [progress, setProgress] = useState<Progress>(saved?.progress || emptyProgress());
+  const [route, setRoute] = useState<{ screen: string; params: Record<string, unknown> }>({ screen: 'landing', params: {} });
+  const tx = (o: Localized) => o[lang];
 
   // persist game state (settings live in the tweaks store)
   useEffect(() => {
@@ -56,10 +57,11 @@ export default function App() {
 
   // blip on any button press (delegated: one listener covers every button)
   useEffect(() => {
-    function onClickSound(e) {
+    function onClickSound(e: MouseEvent) {
       primeAudio();
-      const btn = e.target.closest ? e.target.closest('button') : null;
-      if (btn && !btn.disabled) playClick();
+      const target = e.target as Element | null;
+      const btn = target?.closest('button');
+      if (btn && !(btn as HTMLButtonElement).disabled) playClick();
     }
     document.addEventListener('click', onClickSound);
     return () => document.removeEventListener('click', onClickSound);
@@ -73,13 +75,13 @@ export default function App() {
     };
   });
 
-  function nav(screen, params = {}) {
+  function nav(screen: string, params: Record<string, unknown> = {}) {
     if (IN_APP.includes(screen) && !player) { setRoute({ screen: 'register', params: {} }); return; }
     setRoute({ screen, params });
     const sc = document.querySelector('.screen'); if (sc) sc.scrollTop = 0;
   }
 
-  function onCreate({ name, baseId }) {
+  function onCreate({ name, baseId }: { name: string; baseId: string }) {
     const p = createPlayer({ name, baseId });
     setPlayer(p);
     setRoute({ screen: 'home', params: {} });
@@ -87,26 +89,27 @@ export default function App() {
   }
 
   /* core action: validate an activity (use case + UI feedback) */
-  function complete(standId, actId) {
+  function complete(standId: string, actId: string): CompleteResult {
     const { progress: np, rewards } = completeActivity(progress, standId, actId);
     if (!rewards) return { tickets: 0 };
     setProgress(np);
 
     // feedback
-    const act = standById(standId).activities.find(a => a.id === actId);
-    showToast({ title: '+' + rewards.tickets + ' ' + tx(T('TICKETS', 'TICKETS')), sub: tx(act.name), sprite: 'ticket' });
+    const stand = standById(standId);
+    const act = stand?.activities.find(a => a.id === actId);
+    if (act) showToast({ title: '+' + rewards.tickets + ' ' + tx(T('TICKETS', 'TICKETS')), sub: tx(act.name), sprite: 'ticket' });
     if (rewards.piece) showToast({ title: tx(T('¡Pieza nueva!', 'New piece!')), sub: tx(PIECES[rewards.piece].name), sprite: PIECES[rewards.piece].sprite, dur: 3200 });
-    rewards.badges.forEach(bid => { const b = badgeById(bid); showToast({ title: tx(T('¡Insignia!', 'Badge!')), sub: tx(b.name), sprite: b.icon, dur: 3200 }); });
+    rewards.badges.forEach(bid => { const b = badgeById(bid); if (b) showToast({ title: tx(T('¡Insignia!', 'Badge!')), sub: tx(b.name), sprite: b.icon, dur: 3200 }); });
     if (!rewards.piece && !rewards.badges.length) fireConfetti({ count: 40, y: .5 });
     if (rewards.piece) playUnlock(); else playSuccess();
 
     return { tickets: rewards.tickets, piece: rewards.piece, badges: rewards.badges };
   }
 
-  function claim(prizeId) {
+  function claim(prizeId: string): void {
     const pz = prizeById(prizeId);
     const { progress: np, ok } = claimPrize(progress, pz);
-    if (!ok) return;
+    if (!ok || !pz) return;
     decrementStock(prizeId);
     setProgress(np);
     fireConfetti({ count: 90, colors: ['#ffd23f', '#ff9900', '#fff'] });
@@ -125,13 +128,13 @@ export default function App() {
     { id: 'prizes', ic: 'ticket', label: T('Premios', 'Prizes') },
   ];
 
-  let view;
+  let view: React.ReactNode;
   const k = route.screen;
   if (k === 'landing') view = <Landing lang={lang} nav={nav} layout={heroLayout} />;
   else if (k === 'register') view = <Register lang={lang} nav={nav} onCreate={onCreate} />;
-  else if (k === 'home') view = <MapScreen lang={lang} nav={nav} progress={progress} player={player} />;
-  else if (k === 'stand') view = <StandScreen lang={lang} nav={nav} standId={route.params.standId} progress={progress} actions={actions} player={player} />;
-  else if (k === 'avatar') view = <AvatarScreen lang={lang} nav={nav} progress={progress} player={player} />;
+  else if (k === 'home') view = <MapScreen lang={lang} nav={nav} progress={progress} player={player!} />;
+  else if (k === 'stand') view = <StandScreen lang={lang} nav={nav} standId={route.params.standId as string} progress={progress} actions={actions} player={player!} />;
+  else if (k === 'avatar') view = <AvatarScreen lang={lang} nav={nav} progress={progress} player={player!} />;
   else if (k === 'badges') view = <BadgesScreen lang={lang} progress={progress} />;
   else if (k === 'prizes') view = <PrizesScreen lang={lang} progress={progress} actions={actions} />;
   else if (k === 'scanner') view = <ScannerScreen lang={lang} nav={nav} progress={progress} actions={actions} player={player || { name: 'Demo', baseId: 'explorer' }} />;
@@ -176,12 +179,12 @@ export default function App() {
 
       {showChrome && (
         <div className="tabbar" style={{ position: 'fixed', left: 0, right: 0, bottom: 0 }}>
-          {tabs.map(t => {
-            const on = route.screen === t.id;
+          {tabs.map(tab => {
+            const on = route.screen === tab.id;
             return (
-              <button key={t.id} className={'tab' + (on ? ' on' : '')} onClick={() => nav(t.id)}>
-                <span className="ic" style={{ opacity: on ? 1 : .6 }}><PixelSprite layers={[t.ic]} scale={1.5} /></span>
-                {tx(t.label)}
+              <button key={tab.id} className={'tab' + (on ? ' on' : '')} onClick={() => nav(tab.id)}>
+                <span className="ic" style={{ opacity: on ? 1 : .6 }}><PixelSprite layers={[tab.ic]} scale={1.5} /></span>
+                {tx(tab.label)}
               </button>
             );
           })}

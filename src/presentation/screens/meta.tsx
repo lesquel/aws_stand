@@ -4,17 +4,19 @@
    Presentation · Meta screens — Badges, Prizes, Scanner, Dashboard
    ============================================================ */
 
-import { useState } from 'react';
+import React, { useState } from 'react';
 import { T } from '../../domain/i18n';
 import { BADGES } from '../../domain/badges';
 import { PRIZES, STANDS, PIECES } from '../../domain/catalog';
 import { Card, Btn } from '../components/ui-kit';
 import { PixelSprite } from '../components/sprites';
 import { Avatar } from '../components/avatar';
+import type { Lang, Nav, Progress, Player, Actions, Localized } from '../../domain/types';
 
+interface BadgesScreenProps { lang: Lang; progress: Progress; }
 /* ---------------- BADGES ---------------- */
-export function BadgesScreen({ lang, progress }) {
-  const tx = o => o[lang];
+export function BadgesScreen({ lang, progress }: BadgesScreenProps) {
+  const tx = (o: Localized) => o[lang];
   const earned = BADGES.filter(b => progress.badges.includes(b.id)).length;
   return (
     <div className="screen scr-anim">
@@ -50,9 +52,10 @@ export function BadgesScreen({ lang, progress }) {
   );
 }
 
+interface PrizesScreenProps { lang: Lang; progress: Progress; actions: Actions; }
 /* ---------------- PRIZES ---------------- */
-export function PrizesScreen({ lang, progress, actions }) {
-  const tx = o => o[lang];
+export function PrizesScreen({ lang, progress, actions }: PrizesScreenProps) {
+  const tx = (o: Localized) => o[lang];
   return (
     <div className="screen scr-anim">
       <div className="wrap">
@@ -97,10 +100,11 @@ export function PrizesScreen({ lang, progress, actions }) {
   );
 }
 
+interface ScannerScreenProps { lang: Lang; nav: Nav; progress: Progress; actions: Actions; player: Player; }
 /* ---------------- STAFF SCANNER ---------------- */
-export function ScannerScreen({ lang, nav, progress, actions, player }) {
-  const tx = o => o[lang];
-  const [phase, setPhase] = useState('idle'); // idle | scanning | found
+export function ScannerScreen({ lang, nav, progress, actions, player }: ScannerScreenProps) {
+  const tx = (o: Localized) => o[lang];
+  const [phase, setPhase] = useState<'idle' | 'scanning' | 'found'>('idle'); // idle | scanning | found
   const pending = STANDS.map(s => ({ s, acts: s.activities.filter(a => !progress.doneActivities.includes(a.id)) }))
     .filter(x => x.acts.length);
 
@@ -125,12 +129,17 @@ export function ScannerScreen({ lang, nav, progress, actions, player }) {
           <div style={{ position: 'relative', height: 300, display: 'grid', placeItems: 'center' }}>
             <div style={{ position: 'absolute', inset: 0, background: 'repeating-linear-gradient(0deg,rgba(54,197,240,.06) 0 2px,transparent 2px 6px)' }}></div>
             {/* corner brackets */}
-            {[['tl', 20, 20], ['tr', 20, 20], ['bl', 20, 20], ['br', 20, 20]].map(([k], idx) => {
-              const pos = { tl: { top: 24, left: 24 }, tr: { top: 24, right: 24 }, bl: { bottom: 24, left: 24 }, br: { bottom: 24, right: 24 } }[k];
+            {(['tl', 'tr', 'bl', 'br'] as const).map((k) => {
+              const posMap: Record<string, React.CSSProperties> = {
+                tl: { top: 24, left: 24 }, tr: { top: 24, right: 24 },
+                bl: { bottom: 24, left: 24 }, br: { bottom: 24, right: 24 },
+              };
               const b = '4px solid var(--cyan)';
-              const st = { position: 'absolute', width: 36, height: 36, ...pos };
-              if (k[0] === 't') st.borderTop = b; if (k[1] === 'l' || k === 'tl' || k === 'bl') st.borderLeft = b;
-              if (k[0] === 'b') st.borderBottom = b; if (k[1] === 'r' || k === 'tr' || k === 'br') st.borderRight = b;
+              const st: React.CSSProperties = { position: 'absolute', width: 36, height: 36, ...posMap[k] };
+              if (k[0] === 't') st.borderTop = b;
+              if (k[0] === 'b') st.borderBottom = b;
+              if (k[1] === 'l') st.borderLeft = b;
+              if (k[1] === 'r') st.borderRight = b;
               return <div key={k} style={st}></div>;
             })}
             {phase === 'found'
@@ -188,11 +197,12 @@ export function ScannerScreen({ lang, nav, progress, actions, player }) {
   );
 }
 
+interface DashboardScreenProps { lang: Lang; nav: Nav; progress: Progress; }
 /* ---------------- ORGANIZER DASHBOARD ---------------- */
-export function DashboardScreen({ lang, nav, progress }) {
-  const tx = o => o[lang];
+export function DashboardScreen({ lang, nav, progress }: DashboardScreenProps) {
+  const tx = (o: Localized) => o[lang];
   // mock aggregate data + live player's contribution
-  const baseVisits = { cloud: 184, ia: 156, sec: 132, crew: 171, build: 98 };
+  const baseVisits: Record<string, number> = { cloud: 184, ia: 156, sec: 132, crew: 171, build: 98 };
   const kpis = [
     { ic: 'ic_people', label: T('Asistentes', 'Attendees'), val: '312', c: 'var(--cyan)' },
     { ic: 'ic_star', label: T('Validaciones', 'Validations'), val: (742 + progress.doneActivities.length).toString(), c: 'var(--green)' },

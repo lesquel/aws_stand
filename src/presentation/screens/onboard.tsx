@@ -10,11 +10,14 @@ import { PIECES } from '../../domain/catalog';
 import { Btn, Card } from '../components/ui-kit';
 import { PixelSprite, AVATAR_BASES } from '../components/sprites';
 import { Avatar, AvatarStage } from '../components/avatar';
+import type { Lang, Nav, Localized, PieceId } from '../../domain/types';
+
+interface LandingProps { lang: Lang; nav: Nav; layout?: string; }
 
 /* ---------------- LANDING ---------------- */
-export function Landing({ lang, nav, layout = 'center' }) {
-  const tx = o => o[lang];
-  const floatPieces = ['cap', 'visor', 'shield', 'backpack', 'boots'];
+export function Landing({ lang, nav, layout = 'center' }: LandingProps) {
+  const tx = (o: Localized) => o[lang];
+  const floatPieces: PieceId[] = ['cap', 'visor', 'shield', 'backpack', 'boots'];
 
   const Title = (
     <div>
@@ -98,9 +101,11 @@ export function Landing({ lang, nav, layout = 'center' }) {
   );
 }
 
+interface RegisterProps { lang: Lang; nav: Nav; onCreate: (p: { name: string; baseId: string }) => void; }
+
 /* ---------------- REGISTER ---------------- */
-export function Register({ lang, nav, onCreate }) {
-  const tx = o => o[lang];
+export function Register({ lang, nav, onCreate }: RegisterProps) {
+  const tx = (o: Localized) => o[lang];
   const [name, setName] = useState('');
   const [baseId, setBaseId] = useState('explorer');
   const valid = name.trim().length >= 2;

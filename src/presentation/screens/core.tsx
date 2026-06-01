@@ -13,10 +13,12 @@ import { Card, Btn, Bar, Modal } from '../components/ui-kit';
 import { PixelSprite } from '../components/sprites';
 import { Avatar, AvatarStage } from '../components/avatar';
 import { fireConfetti } from '../feedback/confetti';
+import type { Lang, Nav, Progress, Player, Actions, Localized, PieceId } from '../../domain/types';
 
+interface QrModalProps { lang: Lang; player: Player; onClose: () => void; }
 /* shared: player QR modal */
-export function QrModal({ lang, player, onClose }) {
-  const tx = o => o[lang];
+export function QrModal({ lang, player, onClose }: QrModalProps) {
+  const tx = (o: Localized) => o[lang];
   return (
     <Modal onClose={onClose}>
       <Card corners raise style={{ background: 'var(--bg-2)', textAlign: 'center', padding: 24 }}>
@@ -40,9 +42,10 @@ export function QrModal({ lang, player, onClose }) {
   );
 }
 
+interface MapScreenProps { lang: Lang; nav: Nav; progress: Progress; player: Player; }
 /* ---------------- MAP / HOME ---------------- */
-export function MapScreen({ lang, nav, progress, player }) {
-  const tx = o => o[lang];
+export function MapScreen({ lang, nav, progress, player }: MapScreenProps) {
+  const tx = (o: Localized) => o[lang];
   const [qr, setQr] = useState(false);
   const totalAct = STANDS.reduce((n, s) => n + s.activities.length, 0);
   const doneAct = progress.doneActivities.length;
@@ -132,18 +135,20 @@ export function MapScreen({ lang, nav, progress, player }) {
   );
 }
 
+interface StandScreenProps { lang: Lang; nav: Nav; standId: string; progress: Progress; actions: Actions; player: Player; }
 /* ---------------- STAND ---------------- */
-export function StandScreen({ lang, nav, standId, progress, actions, player }) {
-  const tx = o => o[lang];
+export function StandScreen({ lang, nav, standId, progress, actions, player }: StandScreenProps) {
+  const tx = (o: Localized) => o[lang];
   const st = standById(standId);
-  const [celebrate, setCelebrate] = useState(null);
+  const [celebrate, setCelebrate] = useState<{ piece: PieceId | null | undefined; badges: string[] } | null>(null);
   const [qr, setQr] = useState(false);
+  if (!st) return null; // guard: stand not found
   const done = standDone(progress, st.id);
 
-  function doValidate(act) {
-    const res = actions.complete(st.id, act.id);
+  function doValidate(act: { id: string }) {
+    const res = actions.complete(st!.id, act.id);
     if (res.piece || (res.badges && res.badges.length)) {
-      setCelebrate({ piece: res.piece, badges: res.badges });
+      setCelebrate({ piece: res.piece, badges: res.badges ?? [] });
     }
   }
 
@@ -212,9 +217,10 @@ export function StandScreen({ lang, nav, standId, progress, actions, player }) {
   );
 }
 
+interface UnlockModalProps { lang: Lang; data: { piece?: PieceId | null; badges: string[] }; onClose: () => void; onAvatar: () => void; }
 /* unlock celebration */
-export function UnlockModal({ lang, data, onClose, onAvatar }) {
-  const tx = o => o[lang];
+export function UnlockModal({ lang, data, onClose, onAvatar }: UnlockModalProps) {
+  const tx = (o: Localized) => o[lang];
   useEffect(() => { fireConfetti({ count: 120 }); }, []);
   const piece = data.piece ? PIECES[data.piece] : null;
   return (
@@ -232,6 +238,7 @@ export function UnlockModal({ lang, data, onClose, onAvatar }) {
         </>)}
         {data.badges && data.badges.map(bid => {
           const b = badgeById(bid);
+          if (!b) return null;
           return (
             <div key={bid} className="row center pop mt14" style={{ justifyContent: 'center', gap: 10, background: 'var(--panel)', padding: 10, border: '2px solid var(--yellow)' }}>
               <PixelSprite layers={[b.icon]} scale={2.4} />
@@ -248,15 +255,16 @@ export function UnlockModal({ lang, data, onClose, onAvatar }) {
   );
 }
 
+interface AvatarScreenProps { lang: Lang; nav: Nav; progress: Progress; player: Player; }
 /* ---------------- AVATAR COLLECTION ---------------- */
-export function AvatarScreen({ lang, nav, progress, player }) {
-  const tx = o => o[lang];
+export function AvatarScreen({ lang, nav, progress, player }: AvatarScreenProps) {
+  const tx = (o: Localized) => o[lang];
   const have = progress.pieces;
   const complete = PIECE_ORDER.every(id => have.includes(id));
-  const [popId, setPopId] = useState(null);
+  const [popId, setPopId] = useState<PieceId | null>(null);
   useEffect(() => {
     const last = progress.lastPiece;
-    if (last) { setPopId(last); const t = setTimeout(() => setPopId(null), 700); return () => clearTimeout(t); }
+    if (last) { setPopId(last); const timer = setTimeout(() => setPopId(null), 700); return () => clearTimeout(timer); }
   }, [progress.lastPiece]);
 
   return (
@@ -285,7 +293,7 @@ export function AvatarScreen({ lang, nav, progress, player }) {
             const stand = STANDS.find(s => s.piece === id);
             return (
               <Card key={id} flat style={{ padding: 12, borderColor: ok ? pc.color : 'var(--line)', cursor: ok ? 'default' : 'pointer' }}
-                onClick={() => { if (!ok) nav('stand', { standId: stand.id }); }}>
+                onClick={() => { if (!ok && stand) nav('stand', { standId: stand.id }); }}>
                 <div className="row center" style={{ gap: 10 }}>
                   <div className={ok ? '' : 'locked'}><PixelSprite layers={[pc.sprite]} scale={2.4} /></div>
                   <div className="f1">
@@ -293,9 +301,9 @@ export function AvatarScreen({ lang, nav, progress, player }) {
                     <div className="pixel" style={{ fontSize: 6, color: 'var(--ink-3)', marginTop: 3 }}>{tx(pc.slot)}</div>
                   </div>
                 </div>
-                <div className="pixel mt10" style={{ fontSize: 7, color: ok ? 'var(--green)' : stand.accent }}>
+                {stand && <div className="pixel mt10" style={{ fontSize: 7, color: ok ? 'var(--green)' : stand.accent }}>
                   {ok ? '✓ ' + tx(T('OBTENIDA', 'UNLOCKED')) : '→ ' + tx(stand.name)}
-                </div>
+                </div>}
               </Card>
             );
           })}

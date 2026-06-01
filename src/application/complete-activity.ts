@@ -8,26 +8,30 @@
 import { standById } from '../domain/catalog';
 import { standDone } from '../domain/progress';
 import { newlyEarnedBadges } from '../domain/badges';
+import type { Progress, Rewards } from '../domain/types';
 
-/**
- * @returns {{ progress: object, rewards: null | { tickets: number, piece: string|null, badges: string[] } }}
- *   rewards is null when the activity was already completed (no-op).
- */
-export function completeActivity(progress, standId, actId) {
+export function completeActivity(
+  progress: Progress,
+  standId: string,
+  actId: string
+): { progress: Progress; rewards: Rewards | null } {
   if (progress.doneActivities.includes(actId)) {
     return { progress, rewards: null };
   }
 
   const st = standById(standId);
+  // If stand not found, treat as no-op (guard against stale data)
+  if (!st) return { progress, rewards: null };
   const act = st.activities.find(a => a.id === actId);
+  if (!act) return { progress, rewards: null };
 
-  const np = JSON.parse(JSON.stringify(progress));
+  const np: Progress = JSON.parse(JSON.stringify(progress));
   np.doneActivities.push(actId);
   np.tickets += act.tickets;
   if (!np.visitedStands.includes(standId)) np.visitedStands.push(standId);
 
   // a piece unlocks the moment its stand is fully cleared
-  let unlockedPiece = null;
+  let unlockedPiece: Progress['lastPiece'] = null;
   if (standDone(np, standId) && !np.pieces.includes(st.piece)) {
     np.pieces.push(st.piece);
     np.lastPiece = st.piece;

@@ -5,19 +5,19 @@
    private-mode environment degrades gracefully instead of throwing.
    ============================================================ */
 
+import type { GameState } from '../application/ports';
+
 const STORE = 'cloudquest_v1';
 
-/** @returns {import('../application/ports').GameState|null} */
-export function load() {
+export function load(): GameState | null {
   try {
-    return JSON.parse(localStorage.getItem(STORE)) || null;
+    return (JSON.parse(localStorage.getItem(STORE) ?? 'null') as GameState) || null;
   } catch {
     return null;
   }
 }
 
-/** @param {import('../application/ports').GameState} state */
-export function save(state) {
+export function save(state: GameState): void {
   try {
     localStorage.setItem(STORE, JSON.stringify(state));
   } catch {
@@ -25,7 +25,7 @@ export function save(state) {
   }
 }
 
-export function clear() {
+export function clear(): void {
   try {
     localStorage.removeItem(STORE);
   } catch {

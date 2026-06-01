@@ -8,8 +8,9 @@
 import { T } from './i18n';
 import { PIECE_ORDER, STANDS } from './catalog';
 import { standDone } from './progress';
+import type { Badge, Progress } from './types';
 
-export const BADGES = [
+export const BADGES: Badge[] = [
   { id: 'explorer', icon: 'ic_compass', name: T('Explorador', 'Explorer'),
     desc: T('Visita 3 stands', 'Visit 3 stands'),
     check: p => p.visitedStands.length >= 3 },
@@ -27,9 +28,9 @@ export const BADGES = [
     check: p => STANDS.every(s => standDone(p, s.id)) },
 ];
 
-export const badgeById = id => BADGES.find(b => b.id === id);
+export const badgeById = (id: string): Badge | undefined => BADGES.find(b => b.id === id);
 
 /* Badge ids that `p` now satisfies but has not been awarded yet. */
-export function newlyEarnedBadges(p) {
+export function newlyEarnedBadges(p: Progress): string[] {
   return BADGES.filter(b => b.check(p) && !p.badges.includes(b.id)).map(b => b.id);
 }

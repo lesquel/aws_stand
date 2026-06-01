@@ -7,19 +7,20 @@
    ============================================================ */
 
 import { T } from './i18n';
+import type { PieceId, Piece, Stand, Prize } from './types';
 
 /* avatar pieces (the collectible album) */
-export const PIECES = {
+export const PIECES: Record<PieceId, Piece> = {
   cap:      { id: 'cap',      sprite: 'cap',      slot: T('Cabeza','Head'),    name: T('Gorra AWS','AWS Cap'),        color: 'var(--orange)' },
   visor:    { id: 'visor',    sprite: 'visor',    slot: T('Ojos','Eyes'),      name: T('Visor IA','AI Visor'),        color: 'var(--cyan)' },
   shield:   { id: 'shield',   sprite: 'shield',   slot: T('Mano','Hand'),      name: T('Escudo Cloud','Cloud Shield'),color: 'var(--green)' },
   backpack: { id: 'backpack', sprite: 'backpack', slot: T('Espalda','Back'),   name: T('Mochila Crew','Crew Pack'),   color: 'var(--pink)' },
   boots:    { id: 'boots',    sprite: 'boots',    slot: T('Pies','Feet'),      name: T('Botas Builder','Builder Boots'), color: 'var(--purple)' },
 };
-export const PIECE_ORDER = ['cap', 'visor', 'shield', 'backpack', 'boots'];
+export const PIECE_ORDER: PieceId[] = ['cap', 'visor', 'shield', 'backpack', 'boots'];
 
 /* stands — each is a "zone" on the map */
-export const STANDS = [
+export const STANDS: Stand[] = [
   {
     id: 'cloud', icon: 'ic_cloud', color: 'var(--orange)', accent: '#ff9900',
     name: T('Puesto Nube', 'Cloud Outpost'),
@@ -87,10 +88,10 @@ export const STANDS = [
   },
 ];
 
-export const standById = id => STANDS.find(s => s.id === id);
+export const standById = (id: string): Stand | undefined => STANDS.find(s => s.id === id);
 
 /* prizes — claim with tickets */
-export const PRIZES = [
+export const PRIZES: Prize[] = [
   { id: 'stickers', sprite: 'flag',     name: T('Pack de stickers', 'Sticker pack'),     cost: 3,  stock: 200 },
   { id: 'tee',      sprite: 'heart',    name: T('Camiseta del evento', 'Event tee'),     cost: 8,  stock: 80 },
   { id: 'bag',      sprite: 'backpack', name: T('Mochila builder', 'Builder backpack'),  cost: 14, stock: 40 },
@@ -98,11 +99,11 @@ export const PRIZES = [
   { id: 'grand',    sprite: 'ic_trophy',name: T('Sorteo: ticket a re:Invent', 'Raffle: re:Invent pass'), cost: 1, stock: 1, raffle: true },
 ];
 
-export const prizeById = id => PRIZES.find(p => p.id === id);
+export const prizeById = (id: string): Prize | undefined => PRIZES.find(p => p.id === id);
 
 /* Reduce remaining stock for a prize. Stock is shared event state (not part of a
    single player's progress), so it is mutated here at the catalog boundary. */
-export function decrementStock(prizeId) {
+export function decrementStock(prizeId: string): void {
   const pz = prizeById(prizeId);
   if (pz && pz.stock > 0) pz.stock -= 1;
 }

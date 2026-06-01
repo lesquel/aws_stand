@@ -5,9 +5,10 @@
    ============================================================ */
 
 import { useRef, useEffect } from 'react';
+import React from 'react';
 
 /* shared palette: char -> color (null = transparent) */
-export const PAL = {
+export const PAL: Record<string, string | null> = {
   '.': null,
   o: '#11162a',  // outline
   k: '#2a2440',  // soft outline
@@ -36,7 +37,7 @@ export const PAL = {
 };
 
 /* every sprite is 16x16 unless noted */
-export const SPRITES = {
+export const SPRITES: Record<string, string[]> = {
   /* ---- base character ---- */
   buddy: [
     '................',
@@ -426,9 +427,14 @@ export const SPRITES = {
 };
 
 /* draw a list of sprite-keys onto a canvas, with optional palette overrides */
-export function paintSprite(canvas, keys, scale, palOverride) {
+export function paintSprite(
+  canvas: HTMLCanvasElement,
+  keys: string[],
+  scale: number,
+  palOverride?: Record<string, string | null>
+): void {
   const pal = palOverride ? { ...PAL, ...palOverride } : PAL;
-  const ctx = canvas.getContext('2d');
+  const ctx = canvas.getContext('2d')!;
   const W = 16, H = 16;
   canvas.width = W * scale; canvas.height = H * scale;
   ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -446,19 +452,37 @@ export function paintSprite(canvas, keys, scale, palOverride) {
   }
 }
 
+export interface PixelSpriteProps {
+  layers?: string[];
+  sprite?: string;
+  scale?: number;
+  pal?: Record<string, string | null>;
+  className?: string;
+  style?: React.CSSProperties;
+}
+
 /* React sprite component. `layers` = array of sprite keys (composited bottom->top) */
-export function PixelSprite({ layers, sprite, scale = 6, pal, className = '', style = {} }) {
-  const ref = useRef(null);
+export function PixelSprite({ layers, sprite, scale = 6, pal, className = '', style = {} }: PixelSpriteProps) {
+  const ref = useRef<HTMLCanvasElement>(null);
   const keys = sprite ? [sprite] : (layers || []);
   const sig = keys.join('|') + ':' + scale + ':' + JSON.stringify(pal || {});
   useEffect(() => {
     if (ref.current) paintSprite(ref.current, keys, scale, pal);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sig]);
   return <canvas ref={ref} className={'pixel-sprite ' + className} style={style} />;
 }
 
+export interface AvatarBase {
+  id: string;
+  name: string;
+  es: string;
+  en: string;
+  pal: Record<string, string>;
+}
+
 /* avatar palette variants for the 4 base characters */
-export const AVATAR_BASES = [
+export const AVATAR_BASES: AvatarBase[] = [
   { id: 'explorer', name: 'Explorador', es: 'Explorador', en: 'Explorer', pal: {} },
   { id: 'aqua', name: 'Aqua', es: 'Aqua', en: 'Aqua',
     pal: { r: '#36c5f0', R: '#1b7fa0', h: '#243a52', H: '#33597d' } },

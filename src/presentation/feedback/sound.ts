@@ -8,10 +8,10 @@
    global on/off flag driven by the Tweaks "sound" setting.
    ============================================================ */
 
-let ctx = null;
+let ctx: AudioContext | null = null;
 let enabled = true;
 
-function audio() {
+function audio(): AudioContext | null {
   if (typeof window === 'undefined') return null;
   if (!ctx) {
     const AC = window.AudioContext || window.webkitAudioContext;
@@ -22,16 +22,24 @@ function audio() {
 }
 
 /* resume the context inside a user gesture so the first blip can play */
-export function primeAudio() {
+export function primeAudio(): void {
   const c = audio();
   if (c && c.state === 'suspended') c.resume();
 }
 
-export function setSoundEnabled(on) { enabled = !!on; }
-export function isSoundEnabled() { return enabled; }
+export function setSoundEnabled(on: boolean): void { enabled = !!on; }
+export function isSoundEnabled(): boolean { return enabled; }
+
+interface ToneOptions {
+  type?: OscillatorType;
+  dur?: number;
+  gain?: number;
+  slideTo?: number | null;
+  at?: number;
+}
 
 /* one short tone with a fast attack + exponential decay envelope */
-function tone(freq, { type = 'square', dur = 0.08, gain = 0.12, slideTo = null, at = 0 } = {}) {
+function tone(freq: number, { type = 'square', dur = 0.08, gain = 0.12, slideTo = null, at = 0 }: ToneOptions = {}): void {
   const c = audio();
   if (!c) return;
   const t0 = c.currentTime + at;
@@ -48,8 +56,15 @@ function tone(freq, { type = 'square', dur = 0.08, gain = 0.12, slideTo = null, 
   osc.stop(t0 + dur + 0.02);
 }
 
+interface ArpOptions {
+  type?: OscillatorType;
+  step?: number;
+  gain?: number;
+  dur?: number;
+}
+
 /* a quick ascending arpeggio (success / unlock fanfares) */
-function arp(freqs, { type = 'square', step = 0.06, gain = 0.13, dur = 0.09 } = {}) {
+function arp(freqs: number[], { type = 'square', step = 0.06, gain = 0.13, dur = 0.09 }: ArpOptions = {}): void {
   const c = audio();
   if (!c) return;
   if (c.state === 'suspended') c.resume();
@@ -58,24 +73,24 @@ function arp(freqs, { type = 'square', step = 0.06, gain = 0.13, dur = 0.09 } = 
 
 /* ---- the public SFX vocabulary ---- */
 
-export function playClick() {
+export function playClick(): void {
   if (!enabled) return;
   const c = audio();
   if (c && c.state === 'suspended') c.resume();
   tone(440, { type: 'square', dur: 0.06, gain: 0.09, slideTo: 660 });
 }
 
-export function playSuccess() {
+export function playSuccess(): void {
   if (!enabled) return;
   arp([523, 659, 784]); // C5 · E5 · G5
 }
 
-export function playUnlock() {
+export function playUnlock(): void {
   if (!enabled) return;
   arp([523, 659, 784, 1047], { step: 0.07, gain: 0.15 }); // C5 · E5 · G5 · C6
 }
 
-export function playPrize() {
+export function playPrize(): void {
   if (!enabled) return;
   arp([659, 784, 988, 1319], { type: 'triangle', step: 0.06, gain: 0.15 }); // E5 · G5 · B5 · E6
 }

@@ -10,17 +10,30 @@
 import { useState, useEffect } from 'react';
 import { PixelSprite } from '../components/sprites';
 
-export function showToast(detail) {
-  window.dispatchEvent(new CustomEvent('quest-toast', { detail }));
+export interface ToastDetail {
+  title: string;
+  sub?: string;
+  sprite?: string | string[];
+  pal?: Record<string, string | null>;
+  dur?: number;
+}
+
+interface ToastItem extends ToastDetail {
+  id: string;
+}
+
+export function showToast(detail: ToastDetail): void {
+  window.dispatchEvent(new CustomEvent<ToastDetail>('quest-toast', { detail }));
 }
 
 export function ToastHost() {
-  const [items, setItems] = useState([]);
+  const [items, setItems] = useState<ToastItem[]>([]);
   useEffect(() => {
-    function on(e) {
+    function on(e: Event) {
+      const detail = (e as CustomEvent<ToastDetail>).detail;
       const id = Math.random().toString(36).slice(2);
-      setItems(x => [...x, { id, ...e.detail }]);
-      setTimeout(() => setItems(x => x.filter(i => i.id !== id)), e.detail.dur || 2600);
+      setItems(x => [...x, { id, ...detail }]);
+      setTimeout(() => setItems(x => x.filter(i => i.id !== id)), detail.dur || 2600);
     }
     window.addEventListener('quest-toast', on);
     return () => window.removeEventListener('quest-toast', on);

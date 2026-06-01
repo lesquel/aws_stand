@@ -5,14 +5,12 @@
    caller (composition root) via the catalog, not here.
    ============================================================ */
 
-/**
- * @param {object} progress current player progress
- * @param {object} prize    the prize entity being claimed
- * @returns {{ progress: object, ok: boolean }}
- *   ok is false when the prize can't be claimed (already claimed,
- *   not enough tickets, or out of stock); progress is then unchanged.
- */
-export function claimPrize(progress, prize) {
+import type { Progress, Prize } from '../domain/types';
+
+export function claimPrize(
+  progress: Progress,
+  prize: Prize | undefined
+): { progress: Progress; ok: boolean } {
   if (!prize) return { progress, ok: false };
 
   const blocked =
@@ -21,7 +19,7 @@ export function claimPrize(progress, prize) {
     prize.stock <= 0;
   if (blocked) return { progress, ok: false };
 
-  const np = JSON.parse(JSON.stringify(progress));
+  const np: Progress = JSON.parse(JSON.stringify(progress));
   np.tickets -= prize.cost;
   np.claimed.push(prize.id);
 

@@ -3,10 +3,8 @@
    The boundary where raw form input becomes a Player entity.
    ============================================================ */
 
-/**
- * @param {{ name: string, baseId: string }} input
- * @returns {{ name: string, baseId: string }} the new player
- */
-export function createPlayer({ name, baseId }) {
-  return { name: name.trim(), baseId };
+import type { Player } from '../domain/types';
+
+export function createPlayer(input: { name: string; baseId: string }): Player {
+  return { name: input.name.trim(), baseId: input.baseId };
 }

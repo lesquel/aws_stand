@@ -3,4 +3,6 @@
    A bilingual label is a plain { es, en } record. Pure, no deps.
    ============================================================ */
 
-export const T = (es, en) => ({ es, en });
+import type { Localized } from './types';
+
+export const T = (es: string, en: string): Localized => ({ es, en });

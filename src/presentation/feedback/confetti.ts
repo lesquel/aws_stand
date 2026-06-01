@@ -7,13 +7,20 @@
    use-case rewards.
    ============================================================ */
 
-export function fireConfetti(opts = {}) {
+interface ConfettiOptions {
+  colors?: string[];
+  count?: number;
+  x?: number;
+  y?: number;
+}
+
+export function fireConfetti(opts: ConfettiOptions = {}): void {
   const colors = opts.colors || ['#ff9900', '#36c5f0', '#2bd576', '#ff5c8a', '#9b6dff', '#ffd23f'];
   const n = opts.count || 90;
   const cv = document.createElement('canvas');
   cv.style.cssText = 'position:fixed;inset:0;z-index:9800;pointer-events:none;image-rendering:pixelated;';
   document.body.appendChild(cv);
-  const ctx = cv.getContext('2d');
+  const ctx = cv.getContext('2d')!;
   function size() { cv.width = window.innerWidth; cv.height = window.innerHeight; }
   size();
   const ox = (opts.x != null ? opts.x : .5) * cv.width;
@@ -27,7 +34,7 @@ export function fireConfetti(opts = {}) {
       life: 1, rot: 0,
     };
   });
-  let raf, frame = 0;
+  let raf: number, frame = 0;
   function step() {
     frame++; ctx.clearRect(0, 0, cv.width, cv.height);
     let alive = false;

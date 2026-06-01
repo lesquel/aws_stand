@@ -1,9 +1,21 @@
+'use client';
+
 /* ============================================================
-   Core screens — Map (home), Stand, Avatar collection
+   Presentation · Core screens — Map (home), Stand, Avatar
    ============================================================ */
 
+import { useState, useEffect } from 'react';
+import { T } from '../../domain/i18n';
+import { STANDS, standById, PIECES, PIECE_ORDER } from '../../domain/catalog';
+import { standDone, standProgress } from '../../domain/progress';
+import { badgeById } from '../../domain/badges';
+import { Card, Btn, Bar, Modal } from '../components/ui-kit';
+import { PixelSprite } from '../components/sprites';
+import { Avatar, AvatarStage } from '../components/avatar';
+import { fireConfetti } from '../feedback/confetti';
+
 /* shared: player QR modal */
-function QrModal({ lang, player, onClose }) {
+export function QrModal({ lang, player, onClose }) {
   const tx = o => o[lang];
   return (
     <Modal onClose={onClose}>
@@ -29,7 +41,7 @@ function QrModal({ lang, player, onClose }) {
 }
 
 /* ---------------- MAP / HOME ---------------- */
-function MapScreen({ lang, nav, progress, player }) {
+export function MapScreen({ lang, nav, progress, player }) {
   const tx = o => o[lang];
   const [qr, setQr] = useState(false);
   const totalAct = STANDS.reduce((n, s) => n + s.activities.length, 0);
@@ -121,7 +133,7 @@ function MapScreen({ lang, nav, progress, player }) {
 }
 
 /* ---------------- STAND ---------------- */
-function StandScreen({ lang, nav, standId, progress, actions, player }) {
+export function StandScreen({ lang, nav, standId, progress, actions, player }) {
   const tx = o => o[lang];
   const st = standById(standId);
   const [celebrate, setCelebrate] = useState(null);
@@ -154,7 +166,7 @@ function StandScreen({ lang, nav, standId, progress, actions, player }) {
           <p className="t" style={{ marginTop: 12 }}>{tx(st.blurb)}</p>
           {/* reward */}
           <div className="row center mt14" style={{ gap: 12, background: 'var(--panel)', padding: 10, border: '2px solid var(--line)' }}>
-            <div className={progress.pieces.includes(st.piece) ? '' : ''}><PixelSprite layers={[PIECES[st.piece].sprite]} scale={2.4} /></div>
+            <div><PixelSprite layers={[PIECES[st.piece].sprite]} scale={2.4} /></div>
             <div className="f1">
               <div className="pixel" style={{ fontSize: 7, color: 'var(--ink-3)' }}>{tx(T('RECOMPENSA', 'REWARD'))}</div>
               <div className="t" style={{ color: 'var(--ink)' }}>{tx(PIECES[st.piece].name)}</div>
@@ -201,7 +213,7 @@ function StandScreen({ lang, nav, standId, progress, actions, player }) {
 }
 
 /* unlock celebration */
-function UnlockModal({ lang, data, onClose, onAvatar }) {
+export function UnlockModal({ lang, data, onClose, onAvatar }) {
   const tx = o => o[lang];
   useEffect(() => { fireConfetti({ count: 120 }); }, []);
   const piece = data.piece ? PIECES[data.piece] : null;
@@ -219,7 +231,7 @@ function UnlockModal({ lang, data, onClose, onAvatar }) {
           <p className="t sm">{tx(T('Pieza añadida a tu avatar', 'Piece added to your avatar'))} · {tx(piece.slot)}</p>
         </>)}
         {data.badges && data.badges.map(bid => {
-          const b = BADGES.find(x => x.id === bid);
+          const b = badgeById(bid);
           return (
             <div key={bid} className="row center pop mt14" style={{ justifyContent: 'center', gap: 10, background: 'var(--panel)', padding: 10, border: '2px solid var(--yellow)' }}>
               <PixelSprite layers={[b.icon]} scale={2.4} />
@@ -237,7 +249,7 @@ function UnlockModal({ lang, data, onClose, onAvatar }) {
 }
 
 /* ---------------- AVATAR COLLECTION ---------------- */
-function AvatarScreen({ lang, nav, progress, player }) {
+export function AvatarScreen({ lang, nav, progress, player }) {
   const tx = o => o[lang];
   const have = progress.pieces;
   const complete = PIECE_ORDER.every(id => have.includes(id));
@@ -272,7 +284,7 @@ function AvatarScreen({ lang, nav, progress, player }) {
             const pc = PIECES[id]; const ok = have.includes(id);
             const stand = STANDS.find(s => s.piece === id);
             return (
-              <Card key={id} flat className={ok ? '' : ''} style={{ padding: 12, borderColor: ok ? pc.color : 'var(--line)', cursor: ok ? 'default' : 'pointer' }}
+              <Card key={id} flat style={{ padding: 12, borderColor: ok ? pc.color : 'var(--line)', cursor: ok ? 'default' : 'pointer' }}
                 onClick={() => { if (!ok) nav('stand', { standId: stand.id }); }}>
                 <div className="row center" style={{ gap: 10 }}>
                   <div className={ok ? '' : 'locked'}><PixelSprite layers={[pc.sprite]} scale={2.4} /></div>
@@ -294,5 +306,3 @@ function AvatarScreen({ lang, nav, progress, player }) {
     </div>
   );
 }
-
-Object.assign(window, { MapScreen, StandScreen, AvatarScreen, QrModal, UnlockModal });

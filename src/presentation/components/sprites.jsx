@@ -1,10 +1,13 @@
+'use client';
+
 /* ============================================================
    Pixel sprite engine — data-driven sprites rendered to <canvas>
-   (React hooks are exposed as globals in index.html)
    ============================================================ */
 
+import { useRef, useEffect } from 'react';
+
 /* shared palette: char -> color (null = transparent) */
-const PAL = {
+export const PAL = {
   '.': null,
   o: '#11162a',  // outline
   k: '#2a2440',  // soft outline
@@ -33,7 +36,7 @@ const PAL = {
 };
 
 /* every sprite is 16x16 unless noted */
-const SPRITES = {
+export const SPRITES = {
   /* ---- base character ---- */
   buddy: [
     '................',
@@ -423,7 +426,7 @@ const SPRITES = {
 };
 
 /* draw a list of sprite-keys onto a canvas, with optional palette overrides */
-function paintSprite(canvas, keys, scale, palOverride) {
+export function paintSprite(canvas, keys, scale, palOverride) {
   const pal = palOverride ? { ...PAL, ...palOverride } : PAL;
   const ctx = canvas.getContext('2d');
   const W = 16, H = 16;
@@ -444,7 +447,7 @@ function paintSprite(canvas, keys, scale, palOverride) {
 }
 
 /* React sprite component. `layers` = array of sprite keys (composited bottom->top) */
-function PixelSprite({ layers, sprite, scale = 6, pal, className = '', style = {} }) {
+export function PixelSprite({ layers, sprite, scale = 6, pal, className = '', style = {} }) {
   const ref = useRef(null);
   const keys = sprite ? [sprite] : (layers || []);
   const sig = keys.join('|') + ':' + scale + ':' + JSON.stringify(pal || {});
@@ -455,7 +458,7 @@ function PixelSprite({ layers, sprite, scale = 6, pal, className = '', style = {
 }
 
 /* avatar palette variants for the 4 base characters */
-const AVATAR_BASES = [
+export const AVATAR_BASES = [
   { id: 'explorer', name: 'Explorador', es: 'Explorador', en: 'Explorer', pal: {} },
   { id: 'aqua', name: 'Aqua', es: 'Aqua', en: 'Aqua',
     pal: { r: '#36c5f0', R: '#1b7fa0', h: '#243a52', H: '#33597d' } },
@@ -464,5 +467,3 @@ const AVATAR_BASES = [
   { id: 'robo', name: 'Robo', es: 'Robo', en: 'Robo',
     pal: { s: '#c9d2e6', S: '#9aa6c2', h: '#7d8aa6', H: '#9aa6c2', r: '#7d8aa6', R: '#566179' } },
 ];
-
-Object.assign(window, { PAL, SPRITES, PixelSprite, paintSprite, AVATAR_BASES });

@@ -1,16 +1,29 @@
+'use client';
+
 /* ============================================================
-   App shell — state, router, persistence, chrome, actions
+   Presentation · App shell (composition root)
+   Wires use cases + storage + feedback to the routed screens.
+   Holds UI state (route, player, progress) and translates use-case
+   rewards into toasts/confetti. No business rules live here.
    ============================================================ */
 
-const STORE = 'cloudquest_v1';
-const emptyProgress = () => ({
-  doneActivities: [], pieces: [], badges: [], claimed: [],
-  visitedStands: [], tickets: 0, lastPiece: null,
-});
-
-function load() {
-  try { return JSON.parse(localStorage.getItem(STORE)) || null; } catch (e) { return null; }
-}
+import { useState, useEffect } from 'react';
+import { T } from '../domain/i18n';
+import { PIECES, standById, prizeById, decrementStock } from '../domain/catalog';
+import { emptyProgress } from '../domain/progress';
+import { badgeById } from '../domain/badges';
+import { completeActivity } from '../application/complete-activity';
+import { claimPrize } from '../application/claim-prize';
+import { createPlayer } from '../application/create-player';
+import { load, save, clear } from '../infrastructure/local-storage-game-repository';
+import { Stars } from './components/ui-kit';
+import { PixelSprite } from './components/sprites';
+import { ToastHost, showToast } from './feedback/toast';
+import { fireConfetti } from './feedback/confetti';
+import { useTweaks, TweaksPanel, TweakSection, TweakRadio, TweakToggle, TweakButton } from './components/tweaks-panel';
+import { Landing, Register } from './screens/onboard';
+import { MapScreen, StandScreen, AvatarScreen } from './screens/core';
+import { BadgesScreen, PrizesScreen, ScannerScreen, DashboardScreen } from './screens/meta';
 
 const IN_APP = ['home', 'stand', 'avatar', 'badges', 'prizes'];
 
@@ -20,7 +33,7 @@ const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
   "scanlines": true
 }/*EDITMODE-END*/;
 
-function App() {
+export default function App() {
   const saved = load();
   const [t, setTweak] = useTweaks(TWEAK_DEFAULTS);
   const lang = t.lang, scanlines = t.scanlines, heroLayout = t.heroLayout;
@@ -32,14 +45,14 @@ function App() {
 
   // persist game state (settings live in the tweaks store)
   useEffect(() => {
-    localStorage.setItem(STORE, JSON.stringify({ player, progress }));
+    save({ player, progress });
   }, [player, progress]);
 
   // expose hooks for verifier / host
   useEffect(() => {
     window.__quest = {
       nav, setTweak, setLang,
-      reset() { localStorage.removeItem(STORE); location.reload(); },
+      reset() { clear(); location.reload(); },
     };
   });
 
@@ -50,49 +63,33 @@ function App() {
   }
 
   function onCreate({ name, baseId }) {
-    setPlayer({ name, baseId });
+    const p = createPlayer({ name, baseId });
+    setPlayer(p);
     setRoute({ screen: 'home', params: {} });
-    setTimeout(() => { fireConfetti({ count: 80 }); showToast({ title: tx(T('¡Bienvenido!', 'Welcome!')), sub: name, sprite: 'flag' }); }, 250);
+    setTimeout(() => { fireConfetti({ count: 80 }); showToast({ title: tx(T('¡Bienvenido!', 'Welcome!')), sub: p.name, sprite: 'flag' }); }, 250);
   }
 
-  /* core action: validate an activity */
+  /* core action: validate an activity (use case + UI feedback) */
   function complete(standId, actId) {
-    const st = standById(standId);
-    const act = st.activities.find(a => a.id === actId);
-    if (progress.doneActivities.includes(actId)) return { tickets: 0 };
-
-    const np = JSON.parse(JSON.stringify(progress));
-    np.doneActivities.push(actId);
-    np.tickets += act.tickets;
-    if (!np.visitedStands.includes(standId)) np.visitedStands.push(standId);
-
-    // piece unlock when stand fully done
-    let unlockedPiece = null;
-    if (standDone(np, standId) && !np.pieces.includes(st.piece)) {
-      np.pieces.push(st.piece); np.lastPiece = st.piece; unlockedPiece = st.piece;
-    } else { np.lastPiece = null; }
-
-    // badge recompute
-    const newBadges = BADGES.filter(b => b.check(np) && !np.badges.includes(b.id)).map(b => b.id);
-    np.badges.push(...newBadges);
-
+    const { progress: np, rewards } = completeActivity(progress, standId, actId);
+    if (!rewards) return { tickets: 0 };
     setProgress(np);
 
     // feedback
-    showToast({ title: '+' + act.tickets + ' ' + tx(T('TICKETS', 'TICKETS')), sub: tx(act.name), sprite: 'ticket' });
-    if (unlockedPiece) showToast({ title: tx(T('¡Pieza nueva!', 'New piece!')), sub: tx(PIECES[unlockedPiece].name), sprite: PIECES[unlockedPiece].sprite, dur: 3200 });
-    newBadges.forEach(bid => { const b = BADGES.find(x => x.id === bid); showToast({ title: tx(T('¡Insignia!', 'Badge!')), sub: tx(b.name), sprite: b.icon, dur: 3200 }); });
-    if (!unlockedPiece && !newBadges.length) fireConfetti({ count: 40, y: .5 });
+    const act = standById(standId).activities.find(a => a.id === actId);
+    showToast({ title: '+' + rewards.tickets + ' ' + tx(T('TICKETS', 'TICKETS')), sub: tx(act.name), sprite: 'ticket' });
+    if (rewards.piece) showToast({ title: tx(T('¡Pieza nueva!', 'New piece!')), sub: tx(PIECES[rewards.piece].name), sprite: PIECES[rewards.piece].sprite, dur: 3200 });
+    rewards.badges.forEach(bid => { const b = badgeById(bid); showToast({ title: tx(T('¡Insignia!', 'Badge!')), sub: tx(b.name), sprite: b.icon, dur: 3200 }); });
+    if (!rewards.piece && !rewards.badges.length) fireConfetti({ count: 40, y: .5 });
 
-    return { tickets: act.tickets, piece: unlockedPiece, badges: newBadges };
+    return { tickets: rewards.tickets, piece: rewards.piece, badges: rewards.badges };
   }
 
   function claim(prizeId) {
-    const pz = PRIZES.find(p => p.id === prizeId);
-    if (progress.claimed.includes(prizeId) || progress.tickets < pz.cost || pz.stock <= 0) return;
-    pz.stock -= 1;
-    const np = JSON.parse(JSON.stringify(progress));
-    np.tickets -= pz.cost; np.claimed.push(prizeId);
+    const pz = prizeById(prizeId);
+    const { progress: np, ok } = claimPrize(progress, pz);
+    if (!ok) return;
+    decrementStock(prizeId);
     setProgress(np);
     fireConfetti({ count: 90, colors: ['#ffd23f', '#ff9900', '#fff'] });
     showToast({ title: pz.raffle ? tx(T('¡Inscrito al sorteo!', 'Entered raffle!')) : tx(T('¡Premio canjeado!', 'Prize claimed!')), sub: tx(pz.name), sprite: pz.sprite, dur: 3000 });
@@ -179,10 +176,8 @@ function App() {
           onChange={v => setTweak('scanlines', v)} />
         <TweakSection label={tx(T('Datos', 'Data'))} />
         <TweakButton label={tx(T('Reiniciar mi progreso', 'Reset my progress'))}
-          onClick={() => { localStorage.removeItem(STORE); location.reload(); }} />
+          onClick={() => { clear(); location.reload(); }} />
       </TweaksPanel>
     </div>
   );
 }
-
-ReactDOM.createRoot(document.getElementById('root')).render(<App />);

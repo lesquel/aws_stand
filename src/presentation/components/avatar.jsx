@@ -1,10 +1,15 @@
+'use client';
+
 /* ============================================================
-   Avatar — composed character: base + collected pieces
+   Presentation · Avatar — base character + collected pieces
    Each layer is its own stacked canvas so palette recolor of the
    base never bleeds into accessory colors.
    ============================================================ */
 
-function Avatar({ baseId = 'explorer', pieces = [], scale = 8, bob, popId, className = '', style = {} }) {
+import { PixelSprite, AVATAR_BASES } from './sprites';
+import { PIECE_ORDER, PIECES } from '../../domain/catalog';
+
+export function Avatar({ baseId = 'explorer', pieces = [], scale = 8, bob, popId, className = '', style = {} }) {
   const base = AVATAR_BASES.find(b => b.id === baseId) || AVATAR_BASES[0];
   const size = 16 * scale;
   const ordered = PIECE_ORDER.filter(id => pieces.includes(id));
@@ -23,7 +28,7 @@ function Avatar({ baseId = 'explorer', pieces = [], scale = 8, bob, popId, class
 }
 
 /* shadow disc to ground the avatar */
-function AvatarStage({ baseId, pieces, scale = 9, popId, bob = true }) {
+export function AvatarStage({ baseId, pieces, scale = 9, popId, bob = true }) {
   return (
     <div style={{ position: 'relative', display: 'inline-flex', flexDirection: 'column', alignItems: 'center' }}>
       <Avatar baseId={baseId} pieces={pieces} scale={scale} bob={bob} popId={popId} />
@@ -34,5 +39,3 @@ function AvatarStage({ baseId, pieces, scale = 9, popId, bob = true }) {
     </div>
   );
 }
-
-Object.assign(window, { Avatar, AvatarStage });

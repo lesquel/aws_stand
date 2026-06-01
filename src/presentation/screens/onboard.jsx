@@ -1,9 +1,18 @@
+'use client';
+
 /* ============================================================
-   Onboarding screens — Landing + Register
+   Presentation · Onboarding screens — Landing + Register
    ============================================================ */
 
+import { useState } from 'react';
+import { T } from '../../domain/i18n';
+import { PIECES } from '../../domain/catalog';
+import { Btn, Card } from '../components/ui-kit';
+import { PixelSprite, AVATAR_BASES } from '../components/sprites';
+import { Avatar, AvatarStage } from '../components/avatar';
+
 /* ---------------- LANDING ---------------- */
-function Landing({ lang, nav, layout = 'center' }) {
+export function Landing({ lang, nav, layout = 'center' }) {
   const tx = o => o[lang];
   const floatPieces = ['cap', 'visor', 'shield', 'backpack', 'boots'];
 
@@ -90,7 +99,7 @@ function Landing({ lang, nav, layout = 'center' }) {
 }
 
 /* ---------------- REGISTER ---------------- */
-function Register({ lang, nav, onCreate }) {
+export function Register({ lang, nav, onCreate }) {
   const tx = o => o[lang];
   const [name, setName] = useState('');
   const [baseId, setBaseId] = useState('explorer');
@@ -149,5 +158,3 @@ function Register({ lang, nav, onCreate }) {
     </div>
   );
 }
-
-Object.assign(window, { Landing, Register });

@@ -1,9 +1,19 @@
+'use client';
+
 /* ============================================================
-   Meta screens — Badges, Prizes, Staff scanner, Organizer dashboard
+   Presentation · Meta screens — Badges, Prizes, Scanner, Dashboard
    ============================================================ */
 
+import { useState } from 'react';
+import { T } from '../../domain/i18n';
+import { BADGES } from '../../domain/badges';
+import { PRIZES, STANDS, PIECES } from '../../domain/catalog';
+import { Card, Btn } from '../components/ui-kit';
+import { PixelSprite } from '../components/sprites';
+import { Avatar } from '../components/avatar';
+
 /* ---------------- BADGES ---------------- */
-function BadgesScreen({ lang, progress }) {
+export function BadgesScreen({ lang, progress }) {
   const tx = o => o[lang];
   const earned = BADGES.filter(b => progress.badges.includes(b.id)).length;
   return (
@@ -41,7 +51,7 @@ function BadgesScreen({ lang, progress }) {
 }
 
 /* ---------------- PRIZES ---------------- */
-function PrizesScreen({ lang, progress, actions }) {
+export function PrizesScreen({ lang, progress, actions }) {
   const tx = o => o[lang];
   return (
     <div className="screen scr-anim">
@@ -88,7 +98,7 @@ function PrizesScreen({ lang, progress, actions }) {
 }
 
 /* ---------------- STAFF SCANNER ---------------- */
-function ScannerScreen({ lang, nav, progress, actions, player }) {
+export function ScannerScreen({ lang, nav, progress, actions, player }) {
   const tx = o => o[lang];
   const [phase, setPhase] = useState('idle'); // idle | scanning | found
   const pending = STANDS.map(s => ({ s, acts: s.activities.filter(a => !progress.doneActivities.includes(a.id)) }))
@@ -179,7 +189,7 @@ function ScannerScreen({ lang, nav, progress, actions, player }) {
 }
 
 /* ---------------- ORGANIZER DASHBOARD ---------------- */
-function DashboardScreen({ lang, nav, progress }) {
+export function DashboardScreen({ lang, nav, progress }) {
   const tx = o => o[lang];
   // mock aggregate data + live player's contribution
   const baseVisits = { cloud: 184, ia: 156, sec: 132, crew: 171, build: 98 };
@@ -272,5 +282,3 @@ function DashboardScreen({ lang, nav, progress }) {
     </div>
   );
 }
-
-Object.assign(window, { BadgesScreen, PrizesScreen, ScannerScreen, DashboardScreen });

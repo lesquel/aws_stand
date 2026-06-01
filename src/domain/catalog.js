@@ -1,22 +1,25 @@
 /* ============================================================
-   Event data model — stands, activities, pieces, badges, prizes
-   Bilingual: each label is { es, en }
+   Domain · Event catalog (entities + reference data)
+   Stands, activities, collectible pieces, badges and prizes.
+   Pure data + lookups. No framework, no side effects.
+   Badge rules live here as `check(progress)` predicates; they are
+   domain invariants, so they sit with the entity they evaluate.
    ============================================================ */
 
-const T = (es, en) => ({ es, en });
+import { T } from './i18n';
 
 /* avatar pieces (the collectible album) */
-const PIECES = {
+export const PIECES = {
   cap:      { id: 'cap',      sprite: 'cap',      slot: T('Cabeza','Head'),    name: T('Gorra AWS','AWS Cap'),        color: 'var(--orange)' },
   visor:    { id: 'visor',    sprite: 'visor',    slot: T('Ojos','Eyes'),      name: T('Visor IA','AI Visor'),        color: 'var(--cyan)' },
   shield:   { id: 'shield',   sprite: 'shield',   slot: T('Mano','Hand'),      name: T('Escudo Cloud','Cloud Shield'),color: 'var(--green)' },
   backpack: { id: 'backpack', sprite: 'backpack', slot: T('Espalda','Back'),   name: T('Mochila Crew','Crew Pack'),   color: 'var(--pink)' },
   boots:    { id: 'boots',    sprite: 'boots',    slot: T('Pies','Feet'),      name: T('Botas Builder','Builder Boots'), color: 'var(--purple)' },
 };
-const PIECE_ORDER = ['cap', 'visor', 'shield', 'backpack', 'boots'];
+export const PIECE_ORDER = ['cap', 'visor', 'shield', 'backpack', 'boots'];
 
 /* stands — each is a "zone" on the map */
-const STANDS = [
+export const STANDS = [
   {
     id: 'cloud', icon: 'ic_cloud', color: 'var(--orange)', accent: '#ff9900',
     name: T('Puesto Nube', 'Cloud Outpost'),
@@ -84,29 +87,10 @@ const STANDS = [
   },
 ];
 
-const standById = id => STANDS.find(s => s.id === id);
-
-/* badges — achievements */
-const BADGES = [
-  { id: 'explorer', icon: 'ic_compass', name: T('Explorador', 'Explorer'),
-    desc: T('Visita 3 stands', 'Visit 3 stands'),
-    check: p => p.visitedStands.length >= 3 },
-  { id: 'network', icon: 'ic_medal', name: T('Networking Pro', 'Networking Pro'),
-    desc: T('Completa 6 actividades', 'Complete 6 activities'),
-    check: p => p.doneActivities.length >= 6 },
-  { id: 'challenger', icon: 'ic_bolt', name: T('Cloud Challenger', 'Cloud Challenger'),
-    desc: T('Termina el Puesto Nube', 'Clear Cloud Outpost'),
-    check: p => standDone(p, 'cloud') },
-  { id: 'collector', icon: 'ic_star', name: T('Coleccionista', 'Collector'),
-    desc: T('Arma el avatar completo', 'Complete your avatar'),
-    check: p => PIECE_ORDER.every(id => p.pieces.includes(id)) },
-  { id: 'full', icon: 'ic_trophy', name: T('Full Event', 'Full Event'),
-    desc: T('Completa los 5 stands', 'Clear all 5 stands'),
-    check: p => STANDS.every(s => standDone(p, s.id)) },
-];
+export const standById = id => STANDS.find(s => s.id === id);
 
 /* prizes — claim with tickets */
-const PRIZES = [
+export const PRIZES = [
   { id: 'stickers', sprite: 'flag',     name: T('Pack de stickers', 'Sticker pack'),     cost: 3,  stock: 200 },
   { id: 'tee',      sprite: 'heart',    name: T('Camiseta del evento', 'Event tee'),     cost: 8,  stock: 80 },
   { id: 'bag',      sprite: 'backpack', name: T('Mochila builder', 'Builder backpack'),  cost: 14, stock: 40 },
@@ -114,17 +98,11 @@ const PRIZES = [
   { id: 'grand',    sprite: 'ic_trophy',name: T('Sorteo: ticket a re:Invent', 'Raffle: re:Invent pass'), cost: 1, stock: 1, raffle: true },
 ];
 
-/* helpers operating on a progress object */
-function standDone(p, standId) {
-  const st = standById(standId); if (!st) return false;
-  return st.activities.every(a => p.doneActivities.includes(a.id));
-}
-function standProgress(p, standId) {
-  const st = standById(standId); if (!st) return { done: 0, total: 0 };
-  const done = st.activities.filter(a => p.doneActivities.includes(a.id)).length;
-  return { done, total: st.activities.length };
-}
+export const prizeById = id => PRIZES.find(p => p.id === id);
 
-Object.assign(window, {
-  T, PIECES, PIECE_ORDER, STANDS, standById, BADGES, PRIZES, standDone, standProgress,
-});
+/* Reduce remaining stock for a prize. Stock is shared event state (not part of a
+   single player's progress), so it is mutated here at the catalog boundary. */
+export function decrementStock(prizeId) {
+  const pz = prizeById(prizeId);
+  if (pz && pz.stock > 0) pz.stock -= 1;
+}

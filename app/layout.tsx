@@ -1,5 +1,7 @@
 import './globals.css';
 import type { Metadata, Viewport } from 'next';
+import { GameProvider } from '@/presentation/state/game-provider';
+import ChromeShell from '@/presentation/components/chrome-shell';
 
 export const metadata: Metadata = {
   title: 'Cloud Quest — Aventura del evento',
@@ -24,7 +26,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           rel="stylesheet"
         />
       </head>
-      <body>{children}</body>
+      <body>
+        <GameProvider>
+          <ChromeShell>{children}</ChromeShell>
+        </GameProvider>
+      </body>
     </html>
   );
 }

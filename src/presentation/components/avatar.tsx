@@ -28,7 +28,7 @@ export function Avatar({ baseId = 'explorer', pieces = [], scale = 8, bob, popId
   return (
     <div className={'avatar ' + (bob ? 'bob ' : '') + className}
          style={{ position: 'relative', width: size, height: size, ...style }}>
-      <PixelSprite layers={['buddy']} scale={scale} pal={base.pal}
+      <PixelSprite layers={[base.sprite || 'buddy']} scale={scale} pal={base.pal}
                    style={{ position: 'absolute', inset: 0 }} />
       {ordered.map(id => (
         <PixelSprite key={id} layers={[PIECES[id].sprite]} scale={scale}

@@ -57,6 +57,82 @@ export const SPRITES: Record<string, string[]> = {
     '..orrrrrrrrrro..',
     '..oobboooobboo..',
   ],
+  /* base character with long hair (same grid, hair frames the face) */
+  buddy_girl: [
+    '................',
+    '.....oooooo.....',
+    '....ohhhhhho....',
+    '...ohHHHHHHho...',
+    '..ohhsssssshho..',
+    '..ohssssssssho..',
+    '..ohWWossWWoho..',
+    '..ohWoossWooho..',
+    '..ohssssssssho..',
+    '..ohSssssssSho..',
+    '..ohssSSSSssho..',
+    '..ohoossssooho..',
+    '..ohrrrrrrrrho..',
+    '..orRrrrrrrRro..',
+    '..orrrrrrrrrro..',
+    '..oobboooobboo..',
+  ],
+  /* base with 3-stripe flag shirt — stripe colors come from pal keys 1/2/3 */
+  buddy_stripe: [
+    '................',
+    '.....oooooo.....',
+    '....ohhhhhho....',
+    '...ohHHHHHHho...',
+    '...osssssssso...',
+    '..osssssssssso..',
+    '..osWWossWWoso..',
+    '..osWoossWooso..',
+    '..osssssssssso..',
+    '..osSssssssSso..',
+    '...ossSSSSsso...',
+    '....oossssoo....',
+    '...o11111111o...',
+    '..o2222222222o..',
+    '..o3333333333o..',
+    '..oobboooobboo..',
+  ],
+  /* long-hair base with 3-stripe flag shirt */
+  buddy_girl_stripe: [
+    '................',
+    '.....oooooo.....',
+    '....ohhhhhho....',
+    '...ohHHHHHHho...',
+    '..ohhsssssshho..',
+    '..ohssssssssho..',
+    '..ohWWossWWoho..',
+    '..ohWoossWooho..',
+    '..ohssssssssho..',
+    '..ohSssssssSho..',
+    '..ohssSSSSssho..',
+    '..ohoossssooho..',
+    '..oh11111111ho..',
+    '..o2222222222o..',
+    '..o3333333333o..',
+    '..oobboooobboo..',
+  ],
+  /* base with vertical 5-stripe rainbow shirt — colors from pal keys 1-5 */
+  buddy_rainbow: [
+    '................',
+    '.....oooooo.....',
+    '....ohhhhhho....',
+    '...ohHHHHHHho...',
+    '...osssssssso...',
+    '..osssssssssso..',
+    '..osWWossWWoso..',
+    '..osWoossWooso..',
+    '..osssssssssso..',
+    '..osSssssssSso..',
+    '...ossSSSSsso...',
+    '....oossssoo....',
+    '...o12233445o...',
+    '..o1122334455o..',
+    '..o1122334455o..',
+    '..oobboooobboo..',
+  ],
   /* ---- accessories (overlay) ---- */
   cap: [
     '................',
@@ -478,10 +554,50 @@ export interface AvatarBase {
   name: string;
   es: string;
   en: string;
+  sprite?: string; // base sprite key, defaults to 'buddy'
   pal: Record<string, string>;
 }
 
-/* avatar palette variants for the 4 base characters */
+/* skin tone ramps: [skin, skin shadow] */
+const SKIN = {
+  light: ['#f4c9a0', '#d8996a'],
+  tan: ['#e0a878', '#b97f4e'],
+  brown: ['#b97a50', '#8e5a38'],
+  dark: ['#8a553a', '#66402b'],
+  deep: ['#5f3a26', '#452a1b'],
+};
+
+/* hair color ramps: [hair, hair light] */
+const HAIR = {
+  brown: ['#4a3326', '#6b4a33'],
+  black: ['#171221', '#2e2640'],
+  blonde: ['#c98f2e', '#e8bb5c'],
+  red: ['#a8341f', '#d45a35'],
+};
+
+/* shirt color ramps: [shirt, shirt dark] */
+const SHIRT = {
+  orange: ['#ff9900', '#ec7211'],
+  cyan: ['#36c5f0', '#1b7fa0'],
+  pink: ['#ff5c8a', '#c23a63'],
+  green: ['#2bd576', '#178a4b'],
+  purple: ['#9b6dff', '#6b46c9'],
+  yellow: ['#ffd23f', '#d9a516'],
+};
+
+function pal(
+  skin: keyof typeof SKIN,
+  hair: keyof typeof HAIR,
+  shirt: keyof typeof SHIRT
+): Record<string, string> {
+  return {
+    s: SKIN[skin][0], S: SKIN[skin][1],
+    h: HAIR[hair][0], H: HAIR[hair][1],
+    r: SHIRT[shirt][0], R: SHIRT[shirt][1],
+  };
+}
+
+/* avatar palette variants — original 4 ids kept stable for saved games */
 export const AVATAR_BASES: AvatarBase[] = [
   { id: 'explorer', name: 'Explorador', es: 'Explorador', en: 'Explorer', pal: {} },
   { id: 'aqua', name: 'Aqua', es: 'Aqua', en: 'Aqua',
@@ -490,4 +606,41 @@ export const AVATAR_BASES: AvatarBase[] = [
     pal: { r: '#ff5c8a', R: '#c23a63', h: '#4a2a52', H: '#6b3d75' } },
   { id: 'robo', name: 'Robo', es: 'Robo', en: 'Robo',
     pal: { s: '#c9d2e6', S: '#9aa6c2', h: '#7d8aa6', H: '#9aa6c2', r: '#7d8aa6', R: '#566179' } },
+  { id: 'sol', name: 'Sol', es: 'Sol', en: 'Sol',
+    pal: pal('brown', 'black', 'yellow') },
+  { id: 'kai', name: 'Kai', es: 'Kai', en: 'Kai',
+    pal: pal('dark', 'black', 'green') },
+  { id: 'ravi', name: 'Ravi', es: 'Ravi', en: 'Ravi',
+    pal: pal('tan', 'brown', 'purple') },
+  { id: 'rojo', name: 'Rojo', es: 'Rojo', en: 'Rojo',
+    pal: pal('light', 'red', 'cyan') },
+  { id: 'luna', name: 'Luna', es: 'Luna', en: 'Luna',
+    sprite: 'buddy_girl', pal: pal('light', 'blonde', 'purple') },
+  { id: 'maya', name: 'Maya', es: 'Maya', en: 'Maya',
+    sprite: 'buddy_girl', pal: pal('tan', 'brown', 'cyan') },
+  { id: 'zuri', name: 'Zuri', es: 'Zuri', en: 'Zuri',
+    sprite: 'buddy_girl', pal: pal('dark', 'black', 'pink') },
+  { id: 'amara', name: 'Amara', es: 'Amara', en: 'Amara',
+    sprite: 'buddy_girl', pal: pal('deep', 'black', 'yellow') },
+  { id: 'mei', name: 'Mei', es: 'Mei', en: 'Mei',
+    sprite: 'buddy_girl', pal: pal('light', 'black', 'green') },
+  { id: 'flor', name: 'Flor', es: 'Flor', en: 'Flor',
+    sprite: 'buddy_girl', pal: pal('brown', 'red', 'orange') },
+  /* pride avatars — flag-shirt colors via stripe keys */
+  { id: 'ari', name: 'Ari', es: 'Ari', en: 'Ari',
+    sprite: 'buddy_rainbow',
+    pal: { ...pal('light', 'brown', 'orange'),
+      '1': '#e40303', '2': '#ffed00', '3': '#008026', '4': '#0061ff', '5': '#732982' } },
+  { id: 'vale', name: 'Vale', es: 'Vale', en: 'Vale',
+    sprite: 'buddy_girl_stripe',
+    pal: { ...pal('tan', 'red', 'orange'),
+      '1': '#d52d00', '2': '#ffffff', '3': '#a30262' } },
+  { id: 'skye', name: 'Skye', es: 'Skye', en: 'Skye',
+    sprite: 'buddy_girl_stripe',
+    pal: { ...pal('light', 'blonde', 'orange'),
+      '1': '#5bcefa', '2': '#f5a9b8', '3': '#ffffff' } },
+  { id: 'pau', name: 'Pau', es: 'Pau', en: 'Pau',
+    sprite: 'buddy_stripe',
+    pal: { ...pal('brown', 'black', 'orange'),
+      '1': '#ff218c', '2': '#ffd800', '3': '#21b1ff' } },
 ];

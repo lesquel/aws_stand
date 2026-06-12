@@ -1,17 +1,11 @@
 'use client';
 
-import { useGame } from '@/presentation/state/game-provider';
-import { ScannerScreen } from '@/presentation/screens/meta';
+import { useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 
+// Legacy scanner route — now redirects to the staff page
 export default function ScannerPage() {
-  const { lang, nav, progress, actions, player } = useGame();
-  return (
-    <ScannerScreen
-      lang={lang}
-      nav={nav}
-      progress={progress}
-      actions={actions}
-      player={player ?? { name: 'Demo', baseId: 'explorer' }}
-    />
-  );
+  const router = useRouter();
+  useEffect(() => { router.replace('/staff'); }, [router]);
+  return null;
 }

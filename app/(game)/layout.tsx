@@ -21,7 +21,7 @@ export default function GameLayout({ children }: { children: React.ReactNode }) 
 
   // Redirect to register if no player (router is stable, so deps are clean)
   useEffect(() => {
-    if (!player) router.replace('/register');
+    if (!player) router.replace('/login');
   }, [player, router]);
 
   if (!player) return null;

@@ -1,17 +1,15 @@
 'use client';
 
 /* ============================================================
-   Presentation · Meta screens — Badges, Prizes, Scanner, Dashboard
+   Presentation · Meta screens — Badges, Prizes, Dashboard
    ============================================================ */
 
-import React, { useState } from 'react';
 import { T } from '../../domain/i18n';
 import { BADGES } from '../../domain/badges';
 import { PRIZES, STANDS, PIECES } from '../../domain/catalog';
 import { Card, Btn } from '../components/ui-kit';
 import { PixelSprite } from '../components/sprites';
-import { Avatar } from '../components/avatar';
-import type { Lang, Nav, Progress, Player, Actions, Localized } from '../../domain/types';
+import type { Lang, Nav, Progress, Actions, Localized } from '../../domain/types';
 
 interface BadgesScreenProps { lang: Lang; progress: Progress; }
 /* ---------------- BADGES ---------------- */
@@ -95,103 +93,6 @@ export function PrizesScreen({ lang, progress, actions }: PrizesScreenProps) {
           })}
         </div>
         <p className="t sm center-txt mt20">{tx(T('Gana tickets completando actividades en cada stand.', 'Earn tickets by completing activities at each stand.'))}</p>
-      </div>
-    </div>
-  );
-}
-
-interface ScannerScreenProps { lang: Lang; nav: Nav; progress: Progress; actions: Actions; player: Player; }
-/* ---------------- STAFF SCANNER ---------------- */
-export function ScannerScreen({ lang, nav, progress, actions, player }: ScannerScreenProps) {
-  const tx = (o: Localized) => o[lang];
-  const [phase, setPhase] = useState<'idle' | 'scanning' | 'found'>('idle'); // idle | scanning | found
-  const pending = STANDS.map(s => ({ s, acts: s.activities.filter(a => !progress.doneActivities.includes(a.id)) }))
-    .filter(x => x.acts.length);
-
-  function scan() {
-    setPhase('scanning');
-    setTimeout(() => setPhase('found'), 1400);
-  }
-
-  return (
-    <div className="screen scr-anim">
-      <div className="wrap narrow" style={{ paddingTop: 30 }}>
-        <div className="spread">
-          <div>
-            <div className="eyebrow" style={{ color: 'var(--cyan)' }}>{tx(T('Modo staff', 'Staff mode'))}</div>
-            <h2 className="h1" style={{ marginTop: 6 }}>{tx(T('Validar actividad', 'Validate activity'))}</h2>
-          </div>
-          <button className="kbtn" onClick={() => nav('landing')}>✕</button>
-        </div>
-
-        {/* scanner viewport */}
-        <Card corners raise className="mt20" style={{ background: '#080c16', borderColor: 'var(--cyan)', padding: 0, overflow: 'hidden' }}>
-          <div style={{ position: 'relative', height: 300, display: 'grid', placeItems: 'center' }}>
-            <div style={{ position: 'absolute', inset: 0, background: 'repeating-linear-gradient(0deg,rgba(54,197,240,.06) 0 2px,transparent 2px 6px)' }}></div>
-            {/* corner brackets */}
-            {(['tl', 'tr', 'bl', 'br'] as const).map((k) => {
-              const posMap: Record<string, React.CSSProperties> = {
-                tl: { top: 24, left: 24 }, tr: { top: 24, right: 24 },
-                bl: { bottom: 24, left: 24 }, br: { bottom: 24, right: 24 },
-              };
-              const b = '4px solid var(--cyan)';
-              const st: React.CSSProperties = { position: 'absolute', width: 36, height: 36, ...posMap[k] };
-              if (k[0] === 't') st.borderTop = b;
-              if (k[0] === 'b') st.borderBottom = b;
-              if (k[1] === 'l') st.borderLeft = b;
-              if (k[1] === 'r') st.borderRight = b;
-              return <div key={k} style={st}></div>;
-            })}
-            {phase === 'found'
-              ? <div className="pop center-txt"><div style={{ background: '#fff', padding: 10, border: '3px solid var(--cyan)', display: 'inline-block' }}><PixelSprite layers={['qr']} scale={6} /></div></div>
-              : <div style={{ position: 'relative' }}>
-                  <div style={{ opacity: phase === 'scanning' ? .4 : .25 }}><PixelSprite layers={['qr']} scale={7} /></div>
-                  {phase === 'scanning' && <div style={{ position: 'absolute', left: -10, right: -10, height: 4, background: 'var(--cyan)', boxShadow: '0 0 12px var(--cyan)', animation: 'scanmove 1.2s ease-in-out infinite' }}></div>}
-                  <style>{`@keyframes scanmove{0%{top:0}50%{top:100%}100%{top:0}}`}</style>
-                </div>}
-          </div>
-        </Card>
-
-        {phase !== 'found'
-          ? <Btn block size="lg" variant="cyan" className="mt20" disabled={phase === 'scanning'} onClick={scan}>
-              {phase === 'scanning' ? tx(T('Escaneando…', 'Scanning…')) : tx(T('Escanear QR del asistente', 'Scan attendee QR'))}
-            </Btn>
-          : <>
-              {/* player found */}
-              <Card corners className="mt20" style={{ background: 'var(--bg-2)' }}>
-                <div className="row center" style={{ gap: 14 }}>
-                  <Card flat style={{ padding: 6, background: 'var(--panel)' }}><Avatar baseId={player.baseId} pieces={progress.pieces} scale={3} /></Card>
-                  <div className="f1">
-                    <div className="pixel" style={{ fontSize: 12, color: 'var(--ink)' }}>{(player.name || 'PLAYER').toUpperCase()}</div>
-                    <div className="t sm">#{(player.name || 'PLAYER').toUpperCase().replace(/\s/g, '').slice(0, 6)}-2026 · {progress.doneActivities.length} {tx(T('actividades', 'activities'))}</div>
-                  </div>
-                  <span className="chip on">{tx(T('Válido', 'Valid'))}</span>
-                </div>
-              </Card>
-
-              <div className="eyebrow mt20" style={{ marginBottom: 10, color: 'var(--cyan)' }}>{tx(T('Marca lo que completó', 'Mark what they completed'))}</div>
-              {pending.length === 0
-                ? <Card flat style={{ padding: 20, textAlign: 'center' }}><div className="t">{tx(T('¡Todo completado! 🎉', 'All completed! 🎉'))}</div></Card>
-                : <div className="col">
-                    {pending.map(({ s, acts }) => (
-                      <Card key={s.id} flat style={{ padding: 12, borderColor: s.accent }}>
-                        <div className="row center" style={{ gap: 10, marginBottom: 8 }}>
-                          <PixelSprite layers={[s.icon]} scale={1.6} />
-                          <span className="pixel" style={{ fontSize: 9, color: s.accent }}>{tx(s.name)}</span>
-                        </div>
-                        <div className="col" style={{ gap: 8 }}>
-                          {acts.map(a => (
-                            <div key={a.id} className="spread">
-                              <span className="t sm" style={{ color: 'var(--ink-2)' }}>{tx(a.name)}</span>
-                              <Btn size="sm" variant="green" onClick={() => actions.complete(s.id, a.id)}>✓ {tx(T('Validar', 'Mark'))}</Btn>
-                            </div>
-                          ))}
-                        </div>
-                      </Card>
-                    ))}
-                  </div>}
-              <Btn block variant="ghost" className="mt20" onClick={() => setPhase('idle')}>{tx(T('Escanear otro', 'Scan another'))}</Btn>
-            </>}
       </div>
     </div>
   );

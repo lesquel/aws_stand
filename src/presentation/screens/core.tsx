@@ -4,7 +4,7 @@
    Presentation · Core screens — Map (home), Stand, Avatar
    ============================================================ */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { T } from '../../domain/i18n';
 import { STANDS, standById, PIECES, PIECE_ORDER } from '../../domain/catalog';
 import { standDone, standProgress } from '../../domain/progress';
@@ -13,6 +13,7 @@ import { Card, Btn, Bar, Modal } from '../components/ui-kit';
 import { PixelSprite } from '../components/sprites';
 import { Avatar, AvatarStage } from '../components/avatar';
 import { fireConfetti } from '../feedback/confetti';
+import { useGame } from '../state/game-provider';
 import type { Lang, Nav, Progress, Player, Actions, Localized, PieceId } from '../../domain/types';
 
 interface QrModalProps { lang: Lang; player: Player; onClose: () => void; }
@@ -33,8 +34,8 @@ export function QrModal({ lang, player, onClose }: QrModalProps) {
           #{(player.name || 'PLAYER').toUpperCase().replace(/\s/g, '').slice(0, 6)}-2026
         </div>
         <p className="t sm" style={{ marginTop: 8 }}>
-          {tx(T('El encargado lo escanea para validar tu actividad.',
-                'Staff scans this to validate your activity.'))}
+          {tx(T('El staff del stand ingresa el código en tu teléfono para validar.',
+                'Stand staff enters their code on your phone to validate.'))}
         </p>
         <Btn block className="mt20" variant="ghost" onClick={onClose}>{tx(T('Cerrar', 'Close'))}</Btn>
       </Card>
@@ -46,6 +47,7 @@ interface MapScreenProps { lang: Lang; nav: Nav; progress: Progress; player: Pla
 /* ---------------- MAP / HOME ---------------- */
 export function MapScreen({ lang, nav, progress, player }: MapScreenProps) {
   const tx = (o: Localized) => o[lang];
+  const { signOut } = useGame();
   const [qr, setQr] = useState(false);
   const totalAct = STANDS.reduce((n, s) => n + s.activities.length, 0);
   const doneAct = progress.doneActivities.length;
@@ -69,9 +71,14 @@ export function MapScreen({ lang, nav, progress, player }: MapScreenProps) {
               <div className="pixel" style={{ fontSize: 13, color: 'var(--ink)' }}>{(player.name || 'PLAYER').toUpperCase()}</div>
             </div>
           </div>
-          <button className="clickable coin" onClick={() => nav('prizes')} style={{ background: 'var(--panel-2)', border: '2px solid var(--line)', padding: '8px 12px', cursor: 'pointer' }}>
-            <PixelSprite layers={['ticket']} scale={2} /> {progress.tickets}
-          </button>
+          <div className="row center" style={{ gap: 8 }}>
+            <button className="clickable coin" onClick={() => nav('prizes')} style={{ background: 'var(--panel-2)', border: '2px solid var(--line)', padding: '8px 12px', cursor: 'pointer' }}>
+              <PixelSprite layers={['ticket']} scale={2} /> {progress.tickets}
+            </button>
+            <button className="kbtn" onClick={() => signOut()} style={{ fontSize: 8, padding: '6px 8px' }}>
+              {tx(T('Salir', 'Log out'))}
+            </button>
+          </div>
         </div>
 
         {/* overall progress */}
@@ -135,6 +142,71 @@ export function MapScreen({ lang, nav, progress, player }: MapScreenProps) {
   );
 }
 
+interface ApprovalModalProps {
+  lang: Lang;
+  onClose: () => void;
+  onApprove: (code: string) => void;
+  error: string | null;
+}
+
+/* approval modal — player asks staff to enter code */
+function ApprovalModal({ lang, onClose, onApprove, error }: ApprovalModalProps) {
+  const tx = (o: Localized) => o[lang];
+  const [code, setCode] = useState('');
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => { inputRef.current?.focus(); }, []);
+
+  const [localError, setLocalError] = useState(error);
+  // Keep localError in sync with the prop (parent sets it on wrong code)
+  useEffect(() => {
+    if (error) {
+      setLocalError(error);
+      setCode('');
+    }
+  }, [error]);
+
+  function submit() {
+    if (code.trim().length === 0) return;
+    onApprove(code.trim());
+  }
+
+  return (
+    <Modal onClose={onClose}>
+      <Card corners raise style={{ background: 'var(--bg-2)', textAlign: 'center', padding: 24 }}>
+        <div className="eyebrow" style={{ color: 'var(--cyan)' }}>{tx(T('APROBACIÓN STAFF', 'STAFF APPROVAL'))}</div>
+        <p className="t" style={{ marginTop: 10 }}>
+          {tx(T('Pide al staff del stand que ingrese su código', 'Ask the stand staff to enter their code'))}
+        </p>
+        <input
+          ref={inputRef}
+          value={code}
+          onChange={e => { setCode(e.target.value.replace(/\D/g, '').slice(0, 4)); setLocalError(null); }}
+          inputMode="numeric"
+          maxLength={4}
+          placeholder="0000"
+          style={{
+            display: 'block', width: '100%', marginTop: 20, padding: '14px 0',
+            background: 'var(--panel)', border: '3px solid ' + (localError ? 'var(--red, #ff4c4c)' : 'var(--line)'),
+            color: 'var(--ink)', fontFamily: 'var(--fontPixel)', fontSize: 36,
+            textAlign: 'center', outline: 'none', letterSpacing: 12,
+          }}
+          onKeyDown={e => { if (e.key === 'Enter') submit(); }}
+        />
+        {localError && (
+          <div className="pixel mt10" style={{ fontSize: 9, color: 'var(--red, #ff4c4c)' }}>
+            {tx(T('Código incorrecto', 'Wrong code'))}
+          </div>
+        )}
+        <div className="row mt20" style={{ gap: 10 }}>
+          <Btn className="f1" variant="ghost" onClick={onClose}>{tx(T('Cancelar', 'Cancel'))}</Btn>
+          <Btn className="f1" variant="green" disabled={code.length === 0} onClick={submit}>{tx(T('Aprobar', 'Approve'))}</Btn>
+        </div>
+      </Card>
+    </Modal>
+  );
+}
+
 interface StandScreenProps { lang: Lang; nav: Nav; standId: string; progress: Progress; actions: Actions; player: Player; }
 /* ---------------- STAND ---------------- */
 export function StandScreen({ lang, nav, standId, progress, actions, player }: StandScreenProps) {
@@ -142,11 +214,26 @@ export function StandScreen({ lang, nav, standId, progress, actions, player }: S
   const st = standById(standId);
   const [celebrate, setCelebrate] = useState<{ piece: PieceId | null | undefined; badges: string[] } | null>(null);
   const [qr, setQr] = useState(false);
+  const [approvalActId, setApprovalActId] = useState<string | null>(null);
+  const [approvalError, setApprovalError] = useState<string | null>(null);
+
   if (!st) return null; // guard: stand not found
   const done = standDone(progress, st.id);
 
-  function doValidate(act: { id: string }) {
-    const res = actions.complete(st!.id, act.id);
+  function openApproval(actId: string) {
+    setApprovalActId(actId);
+    setApprovalError(null);
+  }
+
+  function handleApprove(code: string) {
+    if (!approvalActId) return;
+    const res = actions.approve(st!.id, approvalActId, code);
+    if (!res.ok) {
+      setApprovalError('wrong-code');
+      return;
+    }
+    setApprovalActId(null);
+    setApprovalError(null);
     if (res.piece || (res.badges && res.badges.length)) {
       setCelebrate({ piece: res.piece, badges: res.badges ?? [] });
     }
@@ -200,18 +287,26 @@ export function StandScreen({ lang, nav, standId, progress, actions, player }: S
                 </div>
                 {ok
                   ? <span className="pixel" style={{ fontSize: 8, color: 'var(--green)' }}>{tx(T('LISTO', 'DONE'))}</span>
-                  : <Btn size="sm" variant="green" onClick={() => doValidate(act)}>{tx(T('Validar', 'Validate'))}</Btn>}
+                  : <Btn size="sm" variant="green" onClick={() => openApproval(act.id)}>{tx(T('Validar', 'Validate'))}</Btn>}
               </Card>
             );
           })}
         </div>
 
-        <p className="t sm center-txt mt14">{tx(T('En el evento, el encargado escanea tu QR para validar.', 'At the event, staff scans your QR to validate.'))}</p>
+        <p className="t sm center-txt mt14">{tx(T('El staff del stand ingresa el código en tu teléfono para validar.', 'Stand staff enters their code on your phone to validate.'))}</p>
         <Btn block variant="ghost" className="mt10" onClick={() => setQr(true)}>{tx(T('Mostrar mi código QR', 'Show my QR code'))}</Btn>
         {done && <div className="center-txt mt14"><span className="chip on">★ {tx(T('STAND COMPLETADO', 'STAND CLEARED'))} ★</span></div>}
       </div>
 
       {qr && <QrModal lang={lang} player={player} onClose={() => setQr(false)} />}
+      {approvalActId && (
+        <ApprovalModal
+          lang={lang}
+          onClose={() => { setApprovalActId(null); setApprovalError(null); }}
+          onApprove={handleApprove}
+          error={approvalError}
+        />
+      )}
       {celebrate && <UnlockModal lang={lang} data={celebrate} onClose={() => setCelebrate(null)} onAvatar={() => { setCelebrate(null); nav('avatar'); }} />}
     </div>
   );

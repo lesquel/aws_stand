@@ -3,10 +3,10 @@
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useGame } from '@/presentation/state/game-provider';
-import { Register } from '@/presentation/screens/onboard';
+import { Login } from '@/presentation/screens/login';
 
-export default function RegisterPage() {
-  const { lang, nav, player, signUp, authError, confirmPending } = useGame();
+export default function LoginPage() {
+  const { lang, nav, player, signIn, authError } = useGame();
   const router = useRouter();
 
   // If already logged in, redirect to appropriate screen
@@ -18,5 +18,5 @@ export default function RegisterPage() {
 
   if (player) return null;
 
-  return <Register lang={lang} nav={nav} signUp={signUp} authError={authError} confirmPending={confirmPending} />;
+  return <Login lang={lang} nav={nav} signIn={signIn} authError={authError} />;
 }

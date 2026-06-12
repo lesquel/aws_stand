@@ -30,8 +30,8 @@ export function Landing({ lang, nav, layout = 'center' }: LandingProps) {
               'Roam the event, clear challenges at every stand and build your pixel avatar piece by piece.'))}
       </p>
       <div className="row wrap" style={{ marginTop: 26 }}>
-        <Btn variant="" size="lg" onClick={() => nav('register')}>▶ {tx(T('Comenzar', 'Start'))}</Btn>
-        <Btn variant="ghost" size="lg" onClick={() => nav('scanner')}>{tx(T('Soy staff', 'I am staff'))}</Btn>
+        <Btn variant="" size="lg" onClick={() => nav('login')}>▶ {tx(T('Comenzar', 'Start'))}</Btn>
+        <Btn variant="ghost" size="lg" onClick={() => nav('staff')}>{tx(T('Soy staff', 'I am staff'))}</Btn>
       </div>
       <button className="kbtn" style={{ marginTop: 14 }} onClick={() => nav('dashboard')}>
         ⚙ {tx(T('Panel del organizador', 'Organizer panel'))} →
@@ -101,14 +101,58 @@ export function Landing({ lang, nav, layout = 'center' }: LandingProps) {
   );
 }
 
-interface RegisterProps { lang: Lang; nav: Nav; onCreate: (p: { name: string; baseId: string }) => void; }
+interface RegisterProps {
+  lang: Lang;
+  nav: Nav;
+  signUp: (p: { username: string; email: string; password: string; baseId: string }) => Promise<void>;
+  authError: string | null;
+  confirmPending: boolean;
+}
 
 /* ---------------- REGISTER ---------------- */
-export function Register({ lang, nav, onCreate }: RegisterProps) {
+export function Register({ lang, nav, signUp, authError, confirmPending }: RegisterProps) {
   const tx = (o: Localized) => o[lang];
-  const [name, setName] = useState('');
+  const [username, setUsername] = useState('');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [baseId, setBaseId] = useState('explorer');
-  const valid = name.trim().length >= 2;
+  const [submitting, setSubmitting] = useState(false);
+
+  const valid = username.trim().length >= 2 && email.includes('@') && password.length >= 6;
+
+  async function submit() {
+    if (!valid || submitting) return;
+    setSubmitting(true);
+    await signUp({ username: username.trim(), email, password, baseId });
+    setSubmitting(false);
+  }
+
+  const inputStyle: React.CSSProperties = {
+    width: '100%', marginTop: 8, padding: '14px 14px',
+    background: 'var(--panel)', border: '3px solid var(--line)',
+    color: 'var(--ink)', fontFamily: 'var(--fontBody)', fontSize: 20,
+    outline: 'none', boxSizing: 'border-box',
+  };
+
+  // Confirmation pending — show message instead of form
+  if (confirmPending) {
+    return (
+      <div className="screen scr-anim">
+        <div className="wrap narrow" style={{ paddingTop: 40, display: 'grid', placeItems: 'center', minHeight: '100%' }}>
+          <div className="center-txt" style={{ maxWidth: 360 }}>
+            <div className="pixel" style={{ fontSize: 24, color: 'var(--orange)', marginBottom: 16 }}>✉</div>
+            <h2 className="h2">{tx(T('Revisa tu email', 'Check your email'))}</h2>
+            <p className="t mt14">
+              {tx(T('Te enviamos un enlace para confirmar tu cuenta.', 'We sent you a link to confirm your account.'))}
+            </p>
+            <button className="kbtn mt20" onClick={() => nav('login')}>
+              {tx(T('Ir a iniciar sesión', 'Go to log in'))} →
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="screen scr-anim">
@@ -117,26 +161,70 @@ export function Register({ lang, nav, onCreate }: RegisterProps) {
         <div className="eyebrow mt10">{tx(T('Crea tu jugador', 'Create your player'))}</div>
         <h2 className="h1" style={{ marginTop: 8 }}>{tx(T('¿Quién entra a la party?', 'Who joins the party?'))}</h2>
 
+        {authError && (
+          <div className="pixel mt14" style={{
+            fontSize: 9, color: 'var(--red, #ff4c4c)', padding: '10px 12px',
+            background: 'var(--panel)', border: '2px solid var(--red, #ff4c4c)',
+          }}>
+            {authError}
+          </div>
+        )}
+
         {/* live preview */}
         <Card corners raise className="mt20" style={{ display: 'grid', placeItems: 'center', padding: 22, background: 'var(--bg-2)' }}>
           <AvatarStage baseId={baseId} pieces={[]} scale={9} />
           <div className="pixel" style={{ fontSize: 11, color: 'var(--ink-2)', marginTop: 6 }}>
-            {name.trim() ? name.trim().toUpperCase() : tx(T('SIN NOMBRE', 'NO NAME'))}
+            {username.trim() ? username.trim().toUpperCase() : tx(T('SIN NOMBRE', 'NO NAME'))}
           </div>
         </Card>
 
-        {/* name */}
+        {/* username */}
         <div className="mt20">
           <label className="pixel" style={{ fontSize: 10, color: 'var(--ink-3)' }}>{tx(T('TU NOMBRE', 'YOUR NAME'))}</label>
-          <input value={name} maxLength={14} onChange={e => setName(e.target.value)}
+          <input
+            value={username}
+            maxLength={14}
+            onChange={e => setUsername(e.target.value)}
             placeholder={tx(T('p. ej. Lupita', 'e.g. Sam'))}
-            style={{
-              width: '100%', marginTop: 8, padding: '14px 14px', background: 'var(--panel)',
-              border: '3px solid var(--line)', color: 'var(--ink)', fontFamily: 'var(--fontBody)',
-              fontSize: 24, outline: 'none',
-            }}
+            style={inputStyle}
             onFocus={e => e.target.style.borderColor = 'var(--orange)'}
-            onBlur={e => e.target.style.borderColor = 'var(--line)'} />
+            onBlur={e => e.target.style.borderColor = 'var(--line)'}
+          />
+        </div>
+
+        {/* email */}
+        <div className="mt14">
+          <label className="pixel" style={{ fontSize: 10, color: 'var(--ink-3)' }}>EMAIL</label>
+          <input
+            type="email"
+            value={email}
+            autoComplete="email"
+            onChange={e => setEmail(e.target.value)}
+            placeholder="you@example.com"
+            style={inputStyle}
+            onFocus={e => e.target.style.borderColor = 'var(--orange)'}
+            onBlur={e => e.target.style.borderColor = 'var(--line)'}
+          />
+        </div>
+
+        {/* password */}
+        <div className="mt14">
+          <label className="pixel" style={{ fontSize: 10, color: 'var(--ink-3)' }}>
+            {tx(T('CONTRASEÑA', 'PASSWORD'))}
+          </label>
+          <input
+            type="password"
+            value={password}
+            autoComplete="new-password"
+            onChange={e => setPassword(e.target.value)}
+            placeholder="••••••"
+            style={inputStyle}
+            onFocus={e => e.target.style.borderColor = 'var(--orange)'}
+            onBlur={e => e.target.style.borderColor = 'var(--line)'}
+          />
+          <div className="pixel mt6" style={{ fontSize: 8, color: 'var(--ink-3)' }}>
+            {tx(T('Mínimo 6 caracteres', 'Minimum 6 characters'))}
+          </div>
         </div>
 
         {/* avatar choice */}
@@ -155,10 +243,15 @@ export function Register({ lang, nav, onCreate }: RegisterProps) {
           ))}
         </div>
 
-        <Btn block size="lg" className="mt28" disabled={!valid}
-          onClick={() => { onCreate({ name: name.trim(), baseId }); }}>
-          {tx(T('Crear y entrar', 'Create & enter'))} ▶
+        <Btn block size="lg" className="mt28" disabled={!valid || submitting} onClick={submit}>
+          {submitting ? tx(T('Creando cuenta...', 'Creating account...')) : tx(T('Crear y entrar', 'Create & enter')) + ' ▶'}
         </Btn>
+
+        <div className="center-txt mt20">
+          <button className="kbtn" onClick={() => nav('login')}>
+            {tx(T('Ya tengo cuenta → Entrar', 'I have an account → Log in'))}
+          </button>
+        </div>
       </div>
     </div>
   );

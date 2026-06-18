@@ -9,14 +9,27 @@
 ## Prerequisite (blocker — must be resolved before Slice 1)
 
 SP1 is DB-centric and its tests are integration tests against Postgres + RLS. We need a Supabase
-environment to run them:
+environment to run them.
 
-- **Recommended:** local Supabase stack via the CLI (`supabase start`) so migrations and RLS can be
-  tested without touching a remote project. Migrations live in `supabase/migrations/`.
-- **Alternative:** a provisioned remote Supabase project (not yet created per project history).
+**Chosen environment: remote Supabase project** (user decision, 2026-06-18). Docker/local stack is
+**not** required.
 
-Until one exists, Slice 1 can be authored but not verified. **Do not mark any DB slice done without a
-green integration run.**
+Setup before Slice 1:
+
+- Create the Supabase project (or a dedicated test project — recommended so test data never mixes
+  with anything real).
+- Set `NEXT_PUBLIC_SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_ANON_KEY` in `.env.local`, plus a
+  **service-role key** in a non-public test env var for running migrations/integration tests
+  (service-role bypasses RLS — keep it server-side only, never `NEXT_PUBLIC_*`).
+- Migrations applied to the remote DB (via `supabase db push` against the linked project, or the SQL
+  editor). Migrations are still versioned under `supabase/migrations/`.
+
+Trade-offs of remote vs local: tests hit a shared network DB (slower, needs connectivity), and RLS
+tests must run as distinct roles (anon vs authenticated vs service-role) against the live project.
+Use a **separate test project** to avoid polluting real event data.
+
+Until the test project exists, Slice 1 can be authored but not verified. **Do not mark any DB slice
+done without a green integration run.**
 
 ## Slice ordering (dependency graph)
 

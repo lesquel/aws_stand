@@ -1,7 +1,10 @@
 # Staff scan & completions — design
 
 - **Date:** 2026-06-18
-- **Status:** Approved (design); pending spec review and implementation plan
+- **Status:** ⚠️ **SUPERSEDED** by [`2026-06-18-sp3-staff-scan-completions-design.md`](./2026-06-18-sp3-staff-scan-completions-design.md).
+  This was the pre-multi-event version. The scope grew to a multi-event platform (SP1/SP2), so
+  `completions` now hangs off a per-event `participation`, points come from the DB catalog, and staff
+  are admin-assigned (no shared code). Kept for history; **do not implement from this doc** — use SP3.
 - **Project:** Cloud Quest (aws_stand)
 - **Delivery approach:** B — build the full feature in one slice (QR + manual fallback + leaderboard), all behind a single server-side RPC.
 

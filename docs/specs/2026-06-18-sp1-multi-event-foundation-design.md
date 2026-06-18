@@ -6,7 +6,7 @@
 - **Roadmap position:** Sub-project 1 of 3.
   - **SP1 — Multi-event foundation (this doc):** catalog → DB, per-event progress, `admin` role, player joins an event.
   - SP2 — Admin authoring: CRUD + visual map editor + staff assignment.
-  - SP3 — Staff scan & completions: revised, event-scoped (supersedes `2026-06-18-staff-scan-completions-design.md`).
+  - SP3 — Staff scan & completions: revised, event-scoped (see `2026-06-18-sp3-staff-scan-completions-design.md`).
 
 ## Context & problem
 

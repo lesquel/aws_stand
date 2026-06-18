@@ -3,7 +3,7 @@
 - **Date:** 2026-06-18
 - **Status:** Draft (pending spec review + user approval)
 - **Project:** Cloud Quest (aws_stand)
-- **Supersedes:** `2026-06-18-staff-scan-completions-design.md` (pre-multi-event version).
+- **Supersedes:** an earlier pre-multi-event staff-scan design (removed; see git history).
 - **Roadmap position:** Sub-project 3 of 3. Depends on **SP1** (catalog in DB, `participations`,
   `staff_assignments`) and **SP2** (admin assigns staff to event+stand).
 

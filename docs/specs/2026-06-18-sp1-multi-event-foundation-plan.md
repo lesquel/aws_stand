@@ -21,6 +21,8 @@ Setup before Slice 1:
 - Set `NEXT_PUBLIC_SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_ANON_KEY` in `.env.local`, plus a
   **service-role key** in a non-public test env var for running migrations/integration tests
   (service-role bypasses RLS — keep it server-side only, never `NEXT_PUBLIC_*`).
+- Set `ADMIN_EMAILS` (comma-separated, **server-side / non-public**) — the admin email allowlist
+  seeded into `admin_allowlist`. Never `NEXT_PUBLIC_*`.
 - Migrations applied to the remote DB (via `supabase db push` against the linked project, or the SQL
   editor). Migrations are still versioned under `supabase/migrations/`.
 
@@ -43,12 +45,14 @@ S1 schema+RLS ──> S2 seed ──> S3 catalog read ──┐
 ### Slice 1 — Schema + RLS migration
 
 - **Files:** `supabase/migrations/<ts>_multi_event_foundation.sql`.
-- **Build:** `events`, `stands`, `activities`, `prizes`, `participations`, `staff_assignments`; add
-  `'admin'` to the `profiles.role` check; RLS policies; column grants on `participations`
-  (gameplay columns only, mirroring the existing `profiles` discipline).
+- **Build:** `events`, `stands`, `activities`, `prizes`, `participations`, `staff_assignments`,
+  `admin_allowlist`; add `'admin'` to the `profiles.role` check; **unique constraint on
+  `profiles.username`**; RLS policies; column grants on `participations` (gameplay columns only,
+  mirroring the existing `profiles` discipline).
 - **Tests (first):** admin can insert a stand; non-admin cannot; players read only `active` events
   and their children; a player reads/writes only their own `participations` row; foreign-key/role
-  columns are not client-writable.
+  columns are not client-writable; duplicate username rejected; `admin_allowlist` is not
+  client-readable.
 - **Done:** migration applies cleanly; all RLS tests green.
 
 ### Slice 2 — Seed default event
@@ -89,13 +93,18 @@ S1 schema+RLS ──> S2 seed ──> S3 catalog read ──┐
   only for a single active event; screens read the selected event.
 - **Done:** integration flow login → pick event → play works on the seeded event.
 
-### Slice 6 — Admin role recognition + bootstrap docs
+### Slice 6 — Admin grant via allowlist + role recognition
 
-- **Files:** route/query gating for `role = 'admin'`; README.md + CLAUDE.md.
-- **Build:** recognise the admin capability (gate admin-only access; the admin UI itself is SP2);
-  document the out-of-band SQL bootstrap (`update public.profiles set role='admin' where id=...`).
-- **Tests (first):** admin-gated access allowed for admin, denied for player/staff.
-- **Done:** gating tests green; bootstrap documented.
+- **Files:** `handle_new_user` trigger; allowlist seed step; route/query gating for `role = 'admin'`;
+  README.md + CLAUDE.md.
+- **Build:** seed `admin_allowlist` from the `ADMIN_EMAILS` server-side env var; update the signup
+  trigger to grant `role = 'admin'` when the new user's email is in `admin_allowlist` (else
+  `player`); gate admin-only access (admin UI itself is SP2); document `ADMIN_EMAILS` (non-public)
+  in README/CLAUDE.md.
+- **Tests (first):** a signup with an allowlisted email becomes admin; a non-allowlisted signup
+  becomes player; admin-gated access allowed for admin, denied for player/staff; `ADMIN_EMAILS` is
+  never exposed as `NEXT_PUBLIC_*`.
+- **Done:** allowlist grant + gating tests green; env var documented.
 
 ## After SP1
 

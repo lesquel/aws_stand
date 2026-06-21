@@ -41,10 +41,21 @@ SP1 builds the foundation both later sub-projects sit on: a DB-backed catalog an
 ## Data model
 
 ```sql
--- role gains 'admin'
+-- role gains 'admin'  (SP3 later narrows this to player|admin; staff becomes derived)
 alter table public.profiles
   drop constraint profiles_role_check,
   add constraint profiles_role_check check (role in ('player', 'staff', 'admin'));
+
+-- usernames become globally unique (signup must check availability)
+alter table public.profiles
+  add constraint profiles_username_unique unique (username);
+
+-- admin email allowlist (seeded from the ADMIN_EMAILS server-side env at deploy)
+create table public.admin_allowlist (
+  email text primary key
+);
+alter table public.admin_allowlist enable row level security;
+-- no client policies: readable/writable only by service-role (and SECURITY DEFINER functions)
 
 create table public.events (
   id          uuid primary key default gen_random_uuid(),
@@ -151,13 +162,32 @@ create table public.staff_assignments (
 
 > Join codes / private events are a future option; SP1 ships open join to active events.
 
-## Admin role & bootstrapping
+## Auth & identity
+
+- Users sign up with a **unique username + email + password**. Username uniqueness is enforced by the
+  `profiles_username_unique` constraint; the signup form checks availability before submit.
+- **Login is email + password** (Supabase Auth's native flow).
+- **Login by username** (typing the username instead of the email) is an *optional add-on*: it needs
+  a public `username → email` resolver (RPC/endpoint) run before auth. Deferred unless requested —
+  it introduces username-enumeration surface that must be rate-limited.
+
+## Admin role & bootstrapping — email allowlist
 
 - `admin` is a **global account capability** (platform operator), set on `profiles.role`.
-- **No public path** to become admin (unlike `become_staff`). The first admin is set out-of-band:
-  `update public.profiles set role = 'admin' where id = '<uuid>';` run via the Supabase SQL editor
-  (service role). This is documented in README/CLAUDE.md.
+- **No self-serve code.** Admin is granted by an **email allowlist**:
+  - `ADMIN_EMAILS` (comma-separated) lives in a **server-side, non-public** env var — never
+    `NEXT_PUBLIC_*`. It is seeded into the `admin_allowlist` table at deploy (migration/seed step).
+  - The signup trigger (`handle_new_user`, SECURITY DEFINER) sets `role = 'admin'` when the new
+    user's email is present in `admin_allowlist`; otherwise `role = 'player'`.
+  - Result: each admin signs up **normally with their own password** (no shared credential, no
+    password in env). Adding/removing an admin = editing `ADMIN_EMAILS` and re-seeding.
+- The allowlist is **service-role only** (RLS denies all client access), so players cannot read or
+  alter who is an admin.
 - SP1 only *recognises* the admin role (gates routes/queries); the admin **UI** is SP2.
+
+> Rationale: a shared admin email+password in env is a credential-management smell (no rotation, no
+> per-person accounts, browser-exposure risk). The allowlist keeps Supabase Auth as the source of
+> truth and gives each admin their own account.
 
 ## RLS / permissions
 

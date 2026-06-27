@@ -85,7 +85,7 @@ describe('SP1 schema + RLS', () => {
     }
   });
 
-  it('signup creates a profile with role "player" and a non-null, unique qr_token', async () => {
+  it('signup creates a profile with role "participant" and a non-null, unique qr_token', async () => {
     const user = await createTestUser(service);
     createdUserIds.push(user.id);
 
@@ -96,7 +96,7 @@ describe('SP1 schema + RLS', () => {
       .single();
 
     expect(error).toBeNull();
-    expect(data?.role).toBe('player');
+    expect(data?.role).toBe('participant');
     expect(data?.email).toBe(user.email);
     expect(data?.qr_token).toBeTruthy();
     expect(typeof data?.qr_token).toBe('string');
@@ -174,7 +174,99 @@ describe('SP1 schema + RLS', () => {
     expect(adminInsert.data?.id).toBeTruthy();
   });
 
-  it('participations: a player reads/inserts their own row but not another player\'s', async () => {
+  it('join_event on an active event returns a clean participation ledger', async () => {
+    const eventId = await seedEvent(service, 'active');
+    seededEventIds.push(eventId);
+
+    const player = await createTestUser(service);
+    createdUserIds.push(player.id);
+    const client = await authedClient(player.email, player.password);
+
+    const { data, error } = await client.rpc('join_event', { p_event_id: eventId });
+    expect(error).toBeNull();
+    expect(data?.id).toBeTruthy();
+    expect(data?.player_id).toBe(player.id);
+    expect(data?.event_id).toBe(eventId);
+    // Clean init: server controls the starting ledger, not the client.
+    expect(data?.tickets).toBe(0);
+    expect(data?.badges ?? []).toHaveLength(0);
+    expect(data?.pieces ?? []).toHaveLength(0);
+    expect(data?.claimed ?? []).toHaveLength(0);
+    expect(data?.done_activities ?? []).toHaveLength(0);
+  });
+
+  it('join_event is idempotent — calling twice returns the same row, no error', async () => {
+    const eventId = await seedEvent(service, 'active');
+    seededEventIds.push(eventId);
+
+    const player = await createTestUser(service);
+    createdUserIds.push(player.id);
+    const client = await authedClient(player.email, player.password);
+
+    const first = await client.rpc('join_event', { p_event_id: eventId });
+    expect(first.error).toBeNull();
+    expect(first.data?.id).toBeTruthy();
+
+    const second = await client.rpc('join_event', { p_event_id: eventId });
+    expect(second.error).toBeNull();
+    expect(second.data?.id).toBe(first.data?.id);
+
+    // Exactly one row exists for this (player, event).
+    const rows = await service
+      .from('participations')
+      .select('id')
+      .eq('player_id', player.id)
+      .eq('event_id', eventId);
+    expect(rows.data ?? []).toHaveLength(1);
+  });
+
+  it('join_event on a draft event is rejected', async () => {
+    const draftId = await seedEvent(service, 'draft');
+    seededEventIds.push(draftId);
+
+    const player = await createTestUser(service);
+    createdUserIds.push(player.id);
+    const client = await authedClient(player.email, player.password);
+
+    const { data, error } = await client.rpc('join_event', { p_event_id: draftId });
+    expect(error).not.toBeNull();
+    expect(data).toBeNull();
+
+    // No participation leaked through.
+    const rows = await service
+      .from('participations')
+      .select('id')
+      .eq('player_id', player.id)
+      .eq('event_id', draftId);
+    expect(rows.data ?? []).toHaveLength(0);
+  });
+
+  it('a direct client insert into participations is rejected (exploit closed)', async () => {
+    const eventId = await seedEvent(service, 'active');
+    seededEventIds.push(eventId);
+
+    const player = await createTestUser(service);
+    createdUserIds.push(player.id);
+    const client = await authedClient(player.email, player.password);
+
+    // A client must not be able to seed its own ledger with arbitrary values.
+    const exploit = await client
+      .from('participations')
+      .insert({ player_id: player.id, event_id: eventId, tickets: 999, badges: ['fake'] })
+      .select('id');
+    expect(exploit.error).not.toBeNull();
+    expect(exploit.data ?? []).toHaveLength(0);
+
+    // Nothing was written.
+    const rows = await service
+      .from('participations')
+      .select('id, tickets')
+      .eq('player_id', player.id)
+      .eq('event_id', eventId);
+    expect(rows.data ?? []).toHaveLength(0);
+  });
+
+  it('participations: a player cannot read another player\'s row', async () => {
     const eventId = await seedEvent(service, 'active');
     seededEventIds.push(eventId);
 
@@ -183,7 +275,7 @@ describe('SP1 schema + RLS', () => {
     const playerB = await createTestUser(service);
     createdUserIds.push(playerB.id);
 
-    // Seed player B's participation via service role.
+    // Seed player B's participation via service role (bypasses RLS).
     const { error: seedBError } = await service
       .from('participations')
       .insert({ player_id: playerB.id, event_id: eventId });
@@ -193,16 +285,11 @@ describe('SP1 schema + RLS', () => {
 
     const clientA = await authedClient(playerA.email, playerA.password);
 
-    // Player A inserts their own participation — allowed.
-    const insertOwn = await clientA
-      .from('participations')
-      .insert({ player_id: playerA.id, event_id: eventId })
-      .select('id')
-      .single();
-    expect(insertOwn.error).toBeNull();
-    expect(insertOwn.data?.id).toBeTruthy();
+    // Player A joins their own participation via the RPC, then sees only it.
+    const joinOwn = await clientA.rpc('join_event', { p_event_id: eventId });
+    expect(joinOwn.error).toBeNull();
+    expect(joinOwn.data?.id).toBeTruthy();
 
-    // Player A selects their own row — visible.
     const selectOwn = await clientA
       .from('participations')
       .select('player_id')
@@ -229,14 +316,84 @@ describe('SP1 schema + RLS', () => {
     const serviceRead = await service.from('admin_allowlist').select('email').eq('email', email);
     expect(serviceRead.data ?? []).toHaveLength(1);
 
+    // Anon has no grant + no policy: the read must be actively DENIED, not just empty.
     const anon = anonClient();
     const anonRead = await anon.from('admin_allowlist').select('email');
-    expect(anonRead.data ?? []).toHaveLength(0);
+    expect(anonRead.error).not.toBeNull();
+    expect(anonRead.data).toBeNull();
 
+    // Same for an ordinary authenticated (non-admin) client.
     const user = await createTestUser(service);
     createdUserIds.push(user.id);
     const client = await authedClient(user.email, user.password);
     const authedRead = await client.from('admin_allowlist').select('email');
-    expect(authedRead.data ?? []).toHaveLength(0);
+    expect(authedRead.error).not.toBeNull();
+    expect(authedRead.data).toBeNull();
+  });
+
+  it('an anonymous (not signed in) client cannot read the catalog tables', async () => {
+    const eventId = await seedEvent(service, 'active');
+    seededEventIds.push(eventId);
+
+    // Seed a stand on the active event via service role.
+    const { error: standError } = await service
+      .from('stands')
+      .insert({ event_id: eventId, slug: 'anon-stand', name: 'Anon Stand', map_x: 1, map_y: 2 });
+    if (standError) {
+      throw new Error(`Failed to seed stand: ${standError.message}`);
+    }
+
+    const anon = anonClient();
+
+    // Catalog reads are `to authenticated` only — anon sees nothing.
+    const anonEvents = await anon.from('events').select('id');
+    expect(anonEvents.data ?? []).toHaveLength(0);
+
+    const anonStands = await anon.from('stands').select('id');
+    expect(anonStands.data ?? []).toHaveLength(0);
+  });
+
+  it('a non-admin player cannot update or delete an existing stand', async () => {
+    const eventId = await seedEvent(service, 'active');
+    seededEventIds.push(eventId);
+
+    // Seed a stand via service role (bypasses RLS).
+    const seed = await service
+      .from('stands')
+      .insert({ event_id: eventId, slug: 'locked-stand', name: 'Locked Stand', map_x: 5, map_y: 6 })
+      .select('id')
+      .single();
+    if (seed.error || !seed.data) {
+      throw new Error(`Failed to seed stand: ${seed.error?.message ?? 'no row'}`);
+    }
+    const standId = seed.data.id as string;
+
+    const player = await createTestUser(service);
+    createdUserIds.push(player.id);
+    const playerClient = await authedClient(player.email, player.password);
+
+    // UPDATE — RLS admin-write policy blocks non-admins: affects 0 rows.
+    const update = await playerClient
+      .from('stands')
+      .update({ name: 'Hacked Stand' })
+      .eq('id', standId)
+      .select('id');
+    expect(update.data ?? []).toHaveLength(0);
+
+    // DELETE — same: affects 0 rows.
+    const del = await playerClient
+      .from('stands')
+      .delete()
+      .eq('id', standId)
+      .select('id');
+    expect(del.data ?? []).toHaveLength(0);
+
+    // The stand is untouched.
+    const after = await service
+      .from('stands')
+      .select('name')
+      .eq('id', standId)
+      .single();
+    expect(after.data?.name).toBe('Locked Stand');
   });
 });

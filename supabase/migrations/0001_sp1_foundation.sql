@@ -30,8 +30,8 @@ create table public.profiles (
   id         uuid primary key references auth.users(id) on delete cascade,
   username   text not null check (char_length(username) between 2 and 14),
   email      text not null unique,
-  base_id    text not null default 'explorer',
-  role       text not null default 'player' check (role in ('player', 'staff', 'admin')),
+  base_id    text not null default 'explorer', -- validated in app (avatar catalog); intentionally no DB CHECK
+  role       text not null default 'participant' check (role in ('participant', 'staff', 'admin')),
   qr_token   text not null unique,
   created_at timestamptz not null default now()
 );
@@ -55,7 +55,7 @@ $$;
 
 -- ----------------------------------------------------------------------------
 -- handle_new_user — on auth.users insert, create the profile.
--- role is 'admin' when the email is allowlisted, else 'player'.
+-- role is 'admin' when the email is allowlisted, else 'participant'.
 -- username/base_id come from signup metadata; fall back to safe defaults so
 -- service-role / admin-API user creation (no metadata) still succeeds.
 -- ----------------------------------------------------------------------------
@@ -75,7 +75,7 @@ begin
     case
       when exists (select 1 from public.admin_allowlist a where a.email = new.email)
         then 'admin'
-      else 'player'
+      else 'participant'
     end
   );
   return new;
@@ -105,6 +105,11 @@ grant update (username, base_id) on public.profiles to authenticated;
 
 -- ----------------------------------------------------------------------------
 -- events — multi-event container.
+--
+-- NOTE on ON DELETE CASCADE (used by stands/activities/badges/prizes/
+-- participations/staff_assignments below): SP2 admin UI MUST prefer archiving
+-- (status = 'archived') over hard delete. Deleting an active event erases all
+-- of its content and every player's participation in one shot.
 -- ----------------------------------------------------------------------------
 create table public.events (
   id          uuid primary key default gen_random_uuid(),
@@ -198,7 +203,7 @@ create table public.participations (
   badges          jsonb not null default '[]'::jsonb,
   claimed         jsonb not null default '[]'::jsonb,
   done_activities jsonb not null default '[]'::jsonb,
-  joined_at       timestamptz default now(),
+  joined_at       timestamptz not null default now(),
   unique (player_id, event_id)
 );
 alter table public.participations enable row level security;
@@ -295,25 +300,59 @@ grant select, insert, update, delete on public.badges to authenticated;
 grant select, insert, update, delete on public.prizes to authenticated;
 
 -- ============================================================================
--- RLS policies — participations: owner read/insert/update; gameplay columns only.
+-- RLS policies — participations: owner read/update; gameplay columns only.
+-- Insert is NOT granted to clients: a direct insert would let a player seed
+-- their own row with arbitrary tickets/badges. Joining goes through the
+-- SECURITY DEFINER join_event() RPC, which always initializes a clean ledger.
 -- ============================================================================
 create policy participations_select_own on public.participations
   for select to authenticated
   using (player_id = auth.uid());
-
-create policy participations_insert_own on public.participations
-  for insert to authenticated
-  with check (player_id = auth.uid());
 
 create policy participations_update_own on public.participations
   for update to authenticated
   using (player_id = auth.uid())
   with check (player_id = auth.uid());
 
-grant select, insert on public.participations to authenticated;
+grant select on public.participations to authenticated;
+revoke insert on public.participations from authenticated;
 revoke update on public.participations from authenticated;
 grant update (tickets, pieces, badges, claimed, done_activities)
   on public.participations to authenticated;
+
+-- join_event — the only client path to create a participation. SECURITY DEFINER
+-- so it can insert despite the revoked client insert grant. Always initializes a
+-- clean ledger (tickets = 0, empty jsonb arrays); idempotent on (player_id, event_id).
+create or replace function public.join_event(p_event_id uuid)
+returns public.participations
+language plpgsql
+security definer set search_path = public
+as $$
+declare
+  v_row public.participations;
+begin
+  if not exists (
+    select 1 from public.events where id = p_event_id and status = 'active'
+  ) then
+    raise exception 'event not joinable';
+  end if;
+
+  insert into public.participations (player_id, event_id)
+  values (auth.uid(), p_event_id)
+  on conflict (player_id, event_id) do nothing
+  returning * into v_row;
+
+  if v_row.id is null then
+    select * into v_row
+    from public.participations
+    where player_id = auth.uid() and event_id = p_event_id;
+  end if;
+
+  return v_row;
+end;
+$$;
+
+grant execute on function public.join_event(uuid) to authenticated;
 
 -- ============================================================================
 -- RLS policies — staff_assignments: assigned staff or admin can read; admin writes.
@@ -328,3 +367,19 @@ create policy staff_assignments_admin_write on public.staff_assignments
   with check (public.is_admin());
 
 grant select, insert, update, delete on public.staff_assignments to authenticated;
+
+-- ============================================================================
+-- Indexes — back the FK columns used in RLS subqueries and joins so policy
+-- checks (exists ... where child.fk = parent.id) and ownership filters stay
+-- index-driven instead of sequential scans.
+-- ============================================================================
+create index on public.stands (event_id);
+create index on public.activities (stand_id);
+create index on public.badges (activity_id);
+create index on public.prizes (event_id);
+create index on public.participations (player_id);
+create index on public.participations (event_id);
+create index on public.staff_assignments (staff_id);
+create index on public.staff_assignments (event_id);
+create index on public.staff_assignments (stand_id);
+create index on public.events (created_by);

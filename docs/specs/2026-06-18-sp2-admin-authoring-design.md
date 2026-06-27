@@ -2,6 +2,9 @@
 
 - **Date:** 2026-06-18
 - **Status:** Draft (pending spec review + user approval)
+- ⚠️ **Authority:** on conflict, `2026-06-21-mvp-scope-reconciled.md` wins. Revise when SP2 starts —
+  adds: admin **creates staff & participant accounts** (service-role endpoint), **points by
+  position**, **point corrections with audit**.
 - **Project:** Cloud Quest (aws_stand)
 - **Roadmap position:** Sub-project 2 of 3. Depends on **SP1** (DB-backed catalog + `admin` role).
   - SP1 — Multi-event foundation (done as design+plan).

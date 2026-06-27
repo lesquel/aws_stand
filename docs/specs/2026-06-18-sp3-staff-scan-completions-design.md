@@ -2,6 +2,9 @@
 
 - **Date:** 2026-06-18
 - **Status:** Draft (pending spec review + user approval)
+- ⚠️ **Authority:** on conflict, `2026-06-21-mvp-scope-reconciled.md` wins. Revise when SP3 starts —
+  adds: **points by position**, **point corrections with audit**, **event-close winner validation by
+  QR**; staff is an explicit role (admin-created), not derived.
 - **Project:** Cloud Quest (aws_stand)
 - **Supersedes:** an earlier pre-multi-event staff-scan design (removed; see git history).
 - **Roadmap position:** Sub-project 3 of 3. Depends on **SP1** (catalog in DB, `participations`,

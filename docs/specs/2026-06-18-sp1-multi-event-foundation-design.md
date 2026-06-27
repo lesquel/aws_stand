@@ -2,6 +2,9 @@
 
 - **Date:** 2026-06-18
 - **Status:** Draft (pending spec review + user approval)
+- ⚠️ **Authority:** on conflict, `2026-06-21-mvp-scope-reconciled.md` wins. This predates the MVP
+  reconciliation; revise when SP1 starts (explicit `participant|staff|admin` roles, email-as-identity
+  / no unique username, one-activity-per-stand, player static pages).
 - **Project:** Cloud Quest (aws_stand)
 - **Roadmap position:** Sub-project 1 of 3.
   - **SP1 — Multi-event foundation (this doc):** catalog → DB, per-event progress, `admin` role, player joins an event.

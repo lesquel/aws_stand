@@ -12,14 +12,16 @@ import type { Session } from '@supabase/supabase-js';
 import { T } from '../../domain/i18n';
 import { PIECES, STANDS, PRIZES, decrementStock } from '../../domain/catalog';
 import { loadCatalog } from '../../infrastructure/supabase-catalog-repository';
-import { emptyProgress } from '../../domain/progress';
+import { emptyProgress, deriveVisitedStands } from '../../domain/progress';
 import { badgeById } from '../../domain/badges';
 import { completeActivity } from '../../application/complete-activity';
 import { approveActivity } from '../../application/approve-activity';
 import { claimPrize } from '../../application/claim-prize';
 import { load, save, clear } from '../../infrastructure/local-storage-game-repository';
 import { getSupabase, supabaseConfigured } from '../../infrastructure/supabase-client';
-import { fetchProfile, saveProgress, becomeStaffRpc, changeStandRpc } from '../../infrastructure/supabase-game-repository';
+import { fetchProfile, becomeStaffRpc, changeStandRpc } from '../../infrastructure/supabase-game-repository';
+import { joinEvent, saveParticipation } from '../../infrastructure/supabase-participation-repository';
+import { fetchActiveEvents, type ActiveEvent } from '../../infrastructure/supabase-events-repository';
 import { showToast } from '../feedback/toast';
 import { fireConfetti } from '../feedback/confetti';
 import { setSoundEnabled, primeAudio, playClick, playSuccess, playUnlock, playPrize } from '../feedback/sound';
@@ -64,6 +66,7 @@ interface GameContextValue {
   progress: Progress;
   actions: Actions;
   nav: Nav;
+  selectedEventId: string | null;
   stands: Stand[];
   prizes: Prize[];
   catalogLoading: boolean;
@@ -107,6 +110,12 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
   const [authError, setAuthError] = useState<string | null>(null);
   const [confirmPending, setConfirmPending] = useState(false);
 
+  // Per-event selection (SP1 Slice 5). One active event → auto-selected; several
+  // active events → the player picks one (each selection joins it). The selected
+  // event scopes the participation that progress is read from and written to.
+  const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
+  const [activeEvents, setActiveEvents] = useState<ActiveEvent[]>([]);
+
   // Event catalog (stands + prizes) read from the DB for the active event, with
   // a static fallback. `catalog` is null until the first load resolves.
   const [catalog, setCatalog] = useState<{ stands: Stand[]; prizes: Prize[] } | null>(null);
@@ -126,6 +135,13 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
   // Keep a stable ref to session for beforeunload
   const sessionRef = useRef<Session | null>(session);
   sessionRef.current = session;
+  // Stable refs for the async save closures (debounce / unload / sign-out).
+  const selectedEventIdRef = useRef<string | null>(selectedEventId);
+  selectedEventIdRef.current = selectedEventId;
+  // Catalog ref so async join/load can derive visitedStands against the freshest
+  // stands without re-creating the closure on every catalog change.
+  const standsRef = useRef<Stand[]>(stands);
+  standsRef.current = stands;
   // Guard: tracks which user id is currently being loaded (prevents duplicate loadProfile runs)
   const loadingForRef = useRef<string | null>(null);
 
@@ -154,6 +170,8 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       } else {
         setPlayer(null);
         setProgress(emptyProgress());
+        setSelectedEventId(null);
+        setActiveEvents([]);
         setAuthLoading(false);
       }
     });
@@ -170,74 +188,122 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     try {
       const profile = await fetchProfile(supabase, s.user.id);
       if (!profile) return;
+      setPlayer({ name: profile.username, baseId: profile.baseId, role: profile.role });
 
-      // Legacy localStorage migration: if DB progress is empty and local has data, upload it
-      const isEmptyDbProgress =
-        profile.progress.doneActivities.length === 0 &&
-        profile.progress.tickets === 0 &&
-        profile.progress.pieces.length === 0;
-
-      let resolvedProgress = profile.progress;
-
-      if (isEmptyDbProgress) {
-        const local = load();
-        const hasLocalProgress =
-          local?.progress &&
-          (local.progress.doneActivities.length > 0 ||
-            local.progress.tickets > 0 ||
-            local.progress.pieces.length > 0);
-        if (hasLocalProgress && local?.progress) {
-          resolvedProgress = local.progress;
-          try {
-            await saveProgress(supabase, s.user.id, local.progress);
-            // Only clear local data after successful save
-            clear();
-            setTimeout(() => showToast({
-              title: tx(T('Progreso local recuperado', 'Local progress restored')),
-              sprite: 'flag',
-            }), 400);
-          } catch {
-            // Save failed — keep local data in memory; debounced writer will retry
-            console.warn('[loadProfile] Migration save failed; keeping local progress in memory');
-          }
-        }
+      // Resolve joinable events. Exactly one → auto-select & join (single-event
+      // feel). Several → keep them and let the player pick (each pick joins).
+      const events = await fetchActiveEvents(supabase);
+      setActiveEvents(events);
+      if (events.length === 1) {
+        await joinAndLoad(events[0].id);
+      } else if (events.length === 0) {
+        setProgress(emptyProgress());
       }
-
-      setPlayer({ name: profile.username, baseId: profile.baseId, role: profile.role, standId: profile.standId });
-      setProgress(resolvedProgress);
     } finally {
       loadingForRef.current = null;
     }
   }
 
-  // Write-behind: debounced progress save to Supabase when session exists.
-  // Captures the user id at schedule time and validates it at fire time so a
-  // sign-out during the 800ms window cannot write under the wrong user.
+  // Join an event (idempotent RPC) and load its participation into state. Also
+  // runs the one-time legacy localStorage → participation migration: if the
+  // fresh participation is empty and a legacy save exists, upload it once and
+  // clear localStorage only after the upload succeeds.
+  async function joinAndLoad(eventId: string) {
+    if (!supabase) return;
+    const userId = sessionRef.current?.user.id;
+    const participation = await joinEvent(supabase, eventId);
+    let resolved = participation.progress;
+
+    const isEmpty =
+      resolved.doneActivities.length === 0 &&
+      resolved.tickets === 0 &&
+      resolved.pieces.length === 0;
+    if (isEmpty) {
+      const local = load();
+      const hasLocalProgress =
+        local?.progress &&
+        (local.progress.doneActivities.length > 0 ||
+          local.progress.tickets > 0 ||
+          local.progress.pieces.length > 0);
+      if (hasLocalProgress && local?.progress && userId) {
+        try {
+          await saveParticipation(supabase, userId, eventId, local.progress);
+          clear(); // only after a successful upload
+          resolved = local.progress;
+          setTimeout(() => showToast({
+            title: tx(T('Progreso local recuperado', 'Local progress restored')),
+            sprite: 'flag',
+          }), 400);
+        } catch {
+          // Upload failed — keep local progress in memory so the debounced
+          // writer retries; do NOT clear localStorage.
+          console.warn('[joinAndLoad] Migration save failed; keeping local progress in memory');
+          resolved = local.progress;
+        }
+      }
+    }
+
+    // visitedStands is derived (not stored); rebuild it from the current catalog.
+    const withVisited: Progress = {
+      ...resolved,
+      visitedStands: deriveVisitedStands(resolved.doneActivities, standsRef.current),
+    };
+    setSelectedEventId(eventId);
+    setProgress(withVisited);
+  }
+
+  // Player picks an event from the multi-event picker → join and load it.
+  async function selectEvent(eventId: string) {
+    if (!supabase) return;
+    await joinAndLoad(eventId);
+  }
+
+  // Write-behind: debounced participation save to Supabase when a session and an
+  // event are selected. Captures the user id + event id at schedule time and
+  // validates both at fire time so a sign-out or event switch during the 800ms
+  // window cannot write under the wrong user/event.
   useEffect(() => {
-    if (!supabase || !session) return;
+    if (!supabase || !session || !selectedEventId) return;
     const capturedUserId = session.user.id;
+    const capturedEventId = selectedEventId;
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     saveTimerRef.current = setTimeout(() => {
       const current = sessionRef.current;
       if (!current || current.user.id !== capturedUserId) return;
-      saveProgress(supabase!, capturedUserId, progressRef.current).catch((err) => {
-        console.warn('[saveProgress] write-behind failed:', err);
+      if (selectedEventIdRef.current !== capturedEventId) return;
+      saveParticipation(supabase!, capturedUserId, capturedEventId, progressRef.current).catch((err) => {
+        console.warn('[saveParticipation] write-behind failed:', err);
       });
     }, 800);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [progress, session]);
+  }, [progress, session, selectedEventId]);
 
   // Flush on page unload
   useEffect(() => {
     if (!supabase) return;
     function flush() {
       const s = sessionRef.current;
-      if (s) saveProgress(supabase!, s.user.id, progressRef.current).catch(() => { /* best-effort */ });
+      const eventId = selectedEventIdRef.current;
+      if (s && eventId) saveParticipation(supabase!, s.user.id, eventId, progressRef.current).catch(() => { /* best-effort */ });
     }
     window.addEventListener('beforeunload', flush);
     return () => window.removeEventListener('beforeunload', flush);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Re-derive visitedStands whenever the catalog changes (e.g. static → DB
+  // stands resolve after participation already loaded). Idempotent; the no-op
+  // guard prevents a render loop.
+  useEffect(() => {
+    setProgress(prev => {
+      const derived = deriveVisitedStands(prev.doneActivities, stands);
+      const same =
+        derived.length === prev.visitedStands.length &&
+        derived.every(id => prev.visitedStands.includes(id));
+      return same ? prev : { ...prev, visitedStands: derived };
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stands]);
 
   // localStorage fallback: persist when Supabase not configured
   useEffect(() => {
@@ -351,7 +417,8 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     try {
       const s = sessionRef.current;
-      if (s) await saveProgress(supabase, s.user.id, progressRef.current);
+      const eventId = selectedEventIdRef.current;
+      if (s && eventId) await saveParticipation(supabase, s.user.id, eventId, progressRef.current);
     } catch {
       // best-effort — ignore
     }
@@ -467,10 +534,42 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     );
   }
 
+  // Multi-event gate (SP1 Slice 5): when more than one event is active and the
+  // player has not picked one yet, show a minimal picker. With a single active
+  // event this branch never renders (auto-selected during loadProfile).
+  if (player && !selectedEventId && activeEvents.length > 1) {
+    return (
+      <div style={{ position: 'fixed', inset: 0, display: 'grid', placeItems: 'center', background: 'var(--bg)', padding: 24 }}>
+        <div style={{ width: '100%', maxWidth: 420 }}>
+          <div className="pixel" style={{ fontSize: 12, color: 'var(--cyan)', letterSpacing: 2, marginBottom: 16, textAlign: 'center' }}>
+            {tx(T('ELEGÍ UN EVENTO', 'CHOOSE AN EVENT'))}
+          </div>
+          <div style={{ display: 'grid', gap: 10 }}>
+            {activeEvents.map(ev => (
+              <button
+                key={ev.id}
+                type="button"
+                onClick={() => { void selectEvent(ev.id); }}
+                className="t"
+                style={{
+                  width: '100%', textAlign: 'left', padding: '14px 16px',
+                  background: 'var(--surface, #1b1b22)', color: 'var(--ink)',
+                  border: '1px solid var(--line, #333)', borderRadius: 10, cursor: 'pointer',
+                }}
+              >
+                {ev.name}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <GameContext.Provider value={{
       lang, setLang, heroLayout, scanlines, soundOn, setTweak,
-      player, progress, actions, nav,
+      player, progress, actions, nav, selectedEventId,
       stands, prizes, catalogLoading, standById, prizeById,
       signUp, signIn, signOut, becomeStaff, changeStand,
       authError, confirmPending,

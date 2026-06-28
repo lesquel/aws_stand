@@ -1,47 +1,39 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-import type { Progress } from '../domain/types';
-import { emptyProgress } from '../domain/progress';
+import type { Role } from '../domain/types';
 
+// New multi-event schema: profiles holds identity only (no progress column —
+// progress moved to `participations`; no stand_id — staff assignment is SP3).
 interface ProfileRow {
   id: string;
   username: string;
   base_id: string;
-  role: 'player' | 'staff';
-  stand_id: string | null;
-  progress: Progress;
-  updated_at: string;
+  role: 'participant' | 'staff' | 'admin';
 }
 
 export interface ProfileData {
   username: string;
   baseId: string;
-  role: 'player' | 'staff';
-  standId: string | undefined;
-  progress: Progress;
+  role: Role;
+}
+
+// Map the DB role to the app's player/staff distinction. The 'admin' role is a
+// future SP2 concern; until the admin UI exists it plays as a regular player.
+function toAppRole(role: ProfileRow['role']): Role {
+  return role === 'staff' ? 'staff' : 'player';
 }
 
 export async function fetchProfile(supabase: SupabaseClient, userId: string): Promise<ProfileData | null> {
   const { data, error } = await supabase
     .from('profiles')
-    .select('*')
+    .select('id,username,base_id,role')
     .eq('id', userId)
     .single<ProfileRow>();
   if (error || !data) return null;
   return {
     username: data.username,
     baseId: data.base_id,
-    role: data.role,
-    standId: data.stand_id ?? undefined,
-    progress: (data.progress as Progress) || emptyProgress(),
+    role: toAppRole(data.role),
   };
-}
-
-export async function saveProgress(supabase: SupabaseClient, userId: string, progress: Progress): Promise<void> {
-  const { error } = await supabase
-    .from('profiles')
-    .update({ progress, updated_at: new Date().toISOString() })
-    .eq('id', userId);
-  if (error) throw error;
 }
 
 /**

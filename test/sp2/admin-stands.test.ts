@@ -296,6 +296,33 @@ describe('SP2 — admin Stands CRUD', () => {
     expect(data ?? []).toHaveLength(0);
   });
 
+  it('rolls back the whole create when the activity is invalid — no orphan stand (atomicity)', async () => {
+    const admin = await makeAdminClient();
+    const eventId = await makeEvent(admin);
+
+    // Drive the RPC directly with a payload whose activity violates the
+    // activities score_type CHECK constraint. The function inserts the stand
+    // first, then the activity; the CHECK violation must roll back EVERYTHING.
+    // (Going through createStand cannot reach this: boundary validation rejects
+    // an invalid score_type before the RPC is ever called.)
+    const payload = {
+      event_id: eventId,
+      stand: { slug: uniqueSlug('atomic'), name: 'Atomic Stand', map_x: 10, map_y: 10, sort: 0 },
+      activity: { slug: 'bad', name: 'Bad activity', score_type: 'totally-invalid', points_fixed: 1 },
+      badge: { name: 'Orphan badge' },
+    };
+
+    const { error } = await admin.rpc('admin_upsert_stand', { payload });
+    // RED before the migration is applied: function-not-found (PGRST202), not the
+    // CHECK violation. GREEN after apply: 23514 from the activities score_type CHECK.
+    expect(error).not.toBeNull();
+    expect(error?.code).toBe('23514');
+
+    // The proof of atomicity: the stand insert was rolled back, so nothing leaked.
+    const { data: standRows } = await service.from('stands').select('id').eq('event_id', eventId);
+    expect(standRows ?? []).toHaveLength(0);
+  });
+
   it('deleteStand cascades to the activity and badge', async () => {
     const admin = await makeAdminClient();
     const eventId = await makeEvent(admin);

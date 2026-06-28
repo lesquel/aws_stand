@@ -12,15 +12,17 @@
    activity owns exactly one badge (RN-04, `unique(activity_id)`). Creating a
    stand therefore creates all three rows together.
 
-   ATOMICITY: no SECURITY DEFINER RPC is used. The three inserts run
-   sequentially through RLS-guarded table writes; if the activity or badge
-   insert fails, the just-created stand is deleted (its ON DELETE CASCADE removes
-   any child rows), so a failed create never leaves a half-built stand behind.
-   An `admin_upsert_stand` RPC would make this a single transaction and is a
-   reasonable future optimization, but is NOT required for this slice.
+   ATOMICITY: create/update go through the `admin_upsert_stand(payload jsonb)`
+   SECURITY DEFINER RPC (migration 0002). The stand + activity + badge writes run
+   inside ONE transaction (the function body), so any failure rolls the whole
+   operation back — a failed activity/badge write can never leave an orphan stand
+   (activity = null), which would violate RN-03. The previous design used
+   sequential inserts with a cleanup-delete that, if it ALSO failed, left an
+   orphan behind; that fragile path is gone.
 
    Validation happens at this boundary for UX (required name, valid slug, map
-   coords within 0–100, points ≥ 0); the DB constraints/RLS remain the authority.
+   coords within 0–100, points ≥ 0) BEFORE the RPC call; the DB constraints/RLS
+   remain the authority. The RPC's own is_admin() gate enforces authorization.
    ============================================================ */
 
 import type { SupabaseClient, PostgrestError } from '@supabase/supabase-js';
@@ -339,10 +341,23 @@ export async function getStand(
   return data ? mapStand(data as unknown as StandRow) : null;
 }
 
+/** Call the atomic upsert RPC and return the affected stand id. */
+async function upsertStandRpc(
+  supabase: SupabaseClient,
+  payload: Record<string, unknown>,
+): Promise<string> {
+  const { data, error } = await supabase.rpc('admin_upsert_stand', { payload });
+  if (error) throw toFriendlyError(error);
+  if (typeof data !== 'string') {
+    throw new Error('El servidor no devolvió el identificador del stand.');
+  }
+  return data;
+}
+
 /**
- * Create a stand together with its single activity and badge. Sequential inserts
- * with cleanup-on-failure: if a later insert fails, the stand is deleted (ON
- * DELETE CASCADE removes any child rows) so no half-built stand is left behind.
+ * Create a stand together with its single activity and badge. Boundary
+ * validation runs first; the three rows are then written atomically through the
+ * `admin_upsert_stand` RPC, so a failure can never leave an orphan stand behind.
  */
 export async function createStand(
   supabase: SupabaseClient,
@@ -351,11 +366,10 @@ export async function createStand(
 ): Promise<AdminStand> {
   if (!eventId) throw new StandValidationError('Falta el identificador del evento.');
 
-  // Validate every payload up-front so a boundary error never creates a stand.
+  // Validate every payload up-front so a boundary error never reaches the DB.
   const standName = normalizeName(input.name, 'del stand');
   const standSlug = normalizeSlug(input.slug && input.slug.trim() ? input.slug : slugify(input.name));
-  const standRow = {
-    event_id: eventId,
+  const stand = {
     slug: standSlug,
     name: standName,
     description: normalizeText(input.description),
@@ -368,45 +382,22 @@ export async function createStand(
     piece_id: normalizeText(input.pieceId),
     sort: normalizeSort(input.sort),
   };
-  const activityRow = activityPayload(input.activity);
-  const badgeRow = badgePayload(input.badge);
+  const activity = activityPayload(input.activity);
+  const badge = badgePayload(input.badge);
 
-  const { data: created, error: standError } = await supabase
-    .from('stands')
-    .insert(standRow)
-    .select('id')
-    .single();
-  if (standError) throw toFriendlyError(standError);
-  const standId = (created as { id: string }).id;
+  const standId = await upsertStandRpc(supabase, { event_id: eventId, stand, activity, badge });
 
-  try {
-    const { data: activity, error: activityError } = await supabase
-      .from('activities')
-      .insert({ ...activityRow, stand_id: standId })
-      .select('id')
-      .single();
-    if (activityError) throw toFriendlyError(activityError);
-    const activityId = (activity as { id: string }).id;
-
-    const { error: badgeError } = await supabase
-      .from('badges')
-      .insert({ ...badgeRow, activity_id: activityId });
-    if (badgeError) throw toFriendlyError(badgeError);
-  } catch (err) {
-    // Roll back the partial stand; cascade clears any child rows created so far.
-    await supabase.from('stands').delete().eq('id', standId);
-    throw err;
-  }
-
-  const stand = await getStand(supabase, standId);
-  if (!stand) throw new Error('El stand se creó pero no se pudo recargar.');
-  return stand;
+  const created = await getStand(supabase, standId);
+  if (!created) throw new Error('El stand se creó pero no se pudo recargar.');
+  return created;
 }
 
 /**
- * Update a stand's editable fields plus its activity and badge. The stand slug
- * is not editable (changing a live slug breaks player-facing links). Targets the
- * existing activity/badge rows; resolves their ids from the stand when not given.
+ * Update a stand's editable fields plus its activity and badge, atomically
+ * through the `admin_upsert_stand` RPC. The stand slug is not editable (changing
+ * a live slug breaks player-facing links). The RPC resolves and upserts the
+ * single activity/badge by their parent ids, so no client-side row plumbing is
+ * needed; only provided fields are patched.
  */
 export async function updateStand(
   supabase: SupabaseClient,
@@ -418,54 +409,36 @@ export async function updateStand(
   const existing = await getStand(supabase, standId);
   if (!existing) throw new StandValidationError('El stand no existe.');
 
-  const standPatch: Record<string, unknown> = {};
-  if (input.name !== undefined) standPatch.name = normalizeName(input.name, 'del stand');
-  if (input.description !== undefined) standPatch.description = normalizeText(input.description);
-  if (input.tag !== undefined) standPatch.tag = normalizeText(input.tag);
-  if (input.mapX !== undefined) standPatch.map_x = normalizeCoord(input.mapX, 'X');
-  if (input.mapY !== undefined) standPatch.map_y = normalizeCoord(input.mapY, 'Y');
-  if (input.icon !== undefined) standPatch.icon = normalizeText(input.icon);
-  if (input.color !== undefined) standPatch.color = normalizeText(input.color);
-  if (input.accent !== undefined) standPatch.accent = normalizeText(input.accent);
-  if (input.pieceId !== undefined) standPatch.piece_id = normalizeText(input.pieceId);
-  if (input.sort !== undefined) standPatch.sort = normalizeSort(input.sort);
+  // Partial patch: only include keys the caller actually provided. A present key
+  // (even with a null value) is an explicit set; an absent key is left unchanged.
+  const stand: Record<string, unknown> = {};
+  if (input.name !== undefined) stand.name = normalizeName(input.name, 'del stand');
+  if (input.description !== undefined) stand.description = normalizeText(input.description);
+  if (input.tag !== undefined) stand.tag = normalizeText(input.tag);
+  if (input.mapX !== undefined) stand.map_x = normalizeCoord(input.mapX, 'X');
+  if (input.mapY !== undefined) stand.map_y = normalizeCoord(input.mapY, 'Y');
+  if (input.icon !== undefined) stand.icon = normalizeText(input.icon);
+  if (input.color !== undefined) stand.color = normalizeText(input.color);
+  if (input.accent !== undefined) stand.accent = normalizeText(input.accent);
+  if (input.pieceId !== undefined) stand.piece_id = normalizeText(input.pieceId);
+  if (input.sort !== undefined) stand.sort = normalizeSort(input.sort);
 
-  if (Object.keys(standPatch).length > 0) {
-    const { error } = await supabase.from('stands').update(standPatch).eq('id', standId);
-    if (error) throw toFriendlyError(error);
-  }
+  const payload: Record<string, unknown> = { stand_id: standId, stand };
 
   if (input.activity) {
-    const activityId = input.activity.id ?? existing.activity?.id;
-    const payload = activityPayload(input.activity);
-    if (activityId) {
-      const { error } = await supabase.from('activities').update(payload).eq('id', activityId);
-      if (error) throw toFriendlyError(error);
-    } else {
-      const { error } = await supabase
-        .from('activities')
-        .insert({ ...payload, stand_id: standId });
-      if (error) throw toFriendlyError(error);
-    }
+    // Preserve the activity's existing slug instead of regenerating it from the
+    // name; only override when the caller explicitly passes a new slug.
+    const activityInput: ActivityInput = {
+      ...input.activity,
+      slug: input.activity.slug ?? existing.activity?.slug ?? undefined,
+    };
+    payload.activity = activityPayload(activityInput);
+  }
+  if (input.badge) {
+    payload.badge = badgePayload(input.badge);
   }
 
-  if (input.badge) {
-    const badgeId = input.badge.id ?? existing.activity?.badge?.id;
-    const payload = badgePayload(input.badge);
-    if (badgeId) {
-      const { error } = await supabase.from('badges').update(payload).eq('id', badgeId);
-      if (error) throw toFriendlyError(error);
-    } else {
-      // Need an activity to attach the badge to.
-      const activityId = input.activity?.id ?? existing.activity?.id;
-      if (activityId) {
-        const { error } = await supabase
-          .from('badges')
-          .insert({ ...payload, activity_id: activityId });
-        if (error) throw toFriendlyError(error);
-      }
-    }
-  }
+  await upsertStandRpc(supabase, payload);
 
   const updated = await getStand(supabase, standId);
   if (!updated) throw new Error('El stand se actualizó pero no se pudo recargar.');

@@ -19,10 +19,18 @@ import { EventsSection } from './events-section';
 import { StandsSection } from './stands-section';
 import { PrizesSection } from './prizes-section';
 import { StaffSection } from './staff-section';
+import { ParticipantsSection } from './participants-section';
 import { CorrectionsSection } from './corrections-section';
 import { WinnersSection } from './winners-section';
 
-type SectionId = 'events' | 'stands' | 'prizes' | 'staff' | 'corrections' | 'winners';
+type SectionId =
+  | 'events'
+  | 'stands'
+  | 'prizes'
+  | 'staff'
+  | 'participants'
+  | 'corrections'
+  | 'winners';
 
 interface NavItem {
   id: SectionId;
@@ -35,6 +43,7 @@ const NAV: readonly NavItem[] = [
   { id: 'stands', label: T('Stands', 'Stands'), enabled: true },
   { id: 'prizes', label: T('Premios', 'Prizes'), enabled: true },
   { id: 'staff', label: T('Staff', 'Staff'), enabled: true },
+  { id: 'participants', label: T('Participantes', 'Participants'), enabled: true },
   { id: 'corrections', label: T('Correcciones', 'Corrections'), enabled: true },
   { id: 'winners', label: T('Ganadores', 'Winners'), enabled: true },
 ];
@@ -123,6 +132,7 @@ export function AdminConsole() {
         {section === 'stands' && <StandsSection lang={lang as Lang} />}
         {section === 'prizes' && <PrizesSection lang={lang as Lang} />}
         {section === 'staff' && <StaffSection lang={lang as Lang} />}
+        {section === 'participants' && <ParticipantsSection lang={lang as Lang} />}
         {section === 'corrections' && <CorrectionsSection lang={lang as Lang} />}
         {section === 'winners' && <WinnersSection lang={lang as Lang} />}
       </div>

@@ -1,295 +1,363 @@
 'use client';
 
 /* ============================================================
-   Presentation · Staff screen — enrollment + console
-   Two views:
-   - Enrollment: authenticated player enters access code + picks
-     stand; name/avatar come from the DB account (read-only).
-   - Console: shows the stand's staffCode big, lists activities,
-     and gives instructions for validating on the player's phone.
+   Presentation · Staff screen — station console (SP3)
+   Staff are admin-assigned to an (event + stand); there is no self-enrollment.
+   Flow:
+   - Load the caller's assignments (fetchMyAssignments). No assignments → a clear
+     "not assigned" message.
+   - Pick an assigned stand → station scan mode for that stand's activity.
+   - Scan mode: a continuous QR scanner credits each scanned player via
+     approveCompletion; a "Type code" manual fallback is always available (and
+     auto-shown when the camera is denied/unavailable). Position-scored
+     activities expose a 1/2/3 selector before crediting.
+   All scoring is server-side and authorized by staff_assignments.
    ============================================================ */
 
-import { useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { T } from '../../domain/i18n';
-import { STANDS } from '../../domain/catalog';
 import { Btn, Card } from '../components/ui-kit';
 import { PixelSprite } from '../components/sprites';
-import { Avatar, AvatarStage } from '../components/avatar';
-import type { Lang, Nav, Localized, Player } from '../../domain/types';
+import { QrScanner, type QrCameraError } from '../components/qr-scanner';
+import { showToast } from '../feedback/toast';
+import type { Lang, Nav, Localized } from '../../domain/types';
+import type { StaffAssignment, ApproveResult } from '../../infrastructure/supabase-staff-repository';
 
 interface StaffScreenProps {
   lang: Lang;
   nav: Nav;
-  player: Player | null;
-  becomeStaff: (standId: string, accessCode: string) => Promise<{ ok: boolean; error?: string }>;
-  changeStand: (standId: string) => Promise<{ ok: boolean; error?: string }>;
+  getStaffAssignments: () => Promise<StaffAssignment[]>;
+  approveCompletion: (qrToken: string, activityId: string, position?: number) => Promise<ApproveResult>;
 }
 
-export function StaffScreen({ lang, nav, player, becomeStaff, changeStand }: StaffScreenProps) {
-  const [changingStand, setChangingStand] = useState(false);
+export function StaffScreen({ lang, nav, getStaffAssignments, approveCompletion }: StaffScreenProps) {
+  const tx = (o: Localized) => o[lang];
 
-  // If already registered as staff and not actively changing stand, show the console
-  if (player?.role === 'staff' && !changingStand) {
+  const [assignments, setAssignments] = useState<StaffAssignment[] | null>(null);
+  const [loadError, setLoadError] = useState(false);
+  const [active, setActive] = useState<StaffAssignment | null>(null);
+
+  // Keep the latest loader without re-running the mount effect. getStaffAssignments
+  // is a plain (non-memoized) function from GameProvider, so it gets a new identity
+  // on every provider render; depending on it would re-fire the load on unrelated
+  // state changes (write-behind save, catalog load, lang toggle) and a transient
+  // background error would flip a valid staff user into the "could not load" view.
+  const getAssignmentsRef = useRef(getStaffAssignments);
+  getAssignmentsRef.current = getStaffAssignments;
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const list = await getAssignmentsRef.current();
+        if (!cancelled) setAssignments(list);
+      } catch {
+        if (!cancelled) { setAssignments([]); setLoadError(true); }
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []); // load once on mount
+
+  // Loading
+  if (assignments === null) {
     return (
-      <StaffConsole
+      <Centered>
+        <div className="pixel" style={{ fontSize: 11, color: 'var(--cyan)', letterSpacing: 3 }}>
+          {tx(T('CARGANDO...', 'LOADING...'))}
+        </div>
+      </Centered>
+    );
+  }
+
+  // Scan mode for the picked stand
+  if (active) {
+    return (
+      <ScanMode
         lang={lang}
-        nav={nav}
-        player={player}
-        onChangeStand={() => setChangingStand(true)}
+        assignment={active}
+        approveCompletion={approveCompletion}
+        onBack={() => setActive(null)}
+        onExit={() => nav('landing')}
       />
     );
   }
 
-  return (
-    <StaffEnrollment
-      lang={lang}
-      nav={nav}
-      player={player}
-      isChangingStand={player?.role === 'staff'}
-      onDone={() => setChangingStand(false)}
-      becomeStaff={becomeStaff}
-      changeStand={changeStand}
-    />
-  );
-}
-
-/* ── Enrollment ─────────────────────────────────────────────────────────────── */
-
-interface StaffEnrollmentProps {
-  lang: Lang;
-  nav: Nav;
-  player: Player | null;
-  isChangingStand: boolean | undefined;
-  onDone: () => void;
-  becomeStaff: (standId: string, accessCode: string) => Promise<{ ok: boolean; error?: string }>;
-  changeStand: (standId: string) => Promise<{ ok: boolean; error?: string }>;
-}
-
-function StaffEnrollment({ lang, nav, player, isChangingStand, onDone, becomeStaff, changeStand }: StaffEnrollmentProps) {
-  const tx = (o: Localized) => o[lang];
-
-  const [standId, setStandId] = useState(player?.standId ?? '');
-  const [accessCode, setAccessCode] = useState('');
-  const [accessCodeError, setAccessCodeError] = useState<string | null>(null);
-  const [submitting, setSubmitting] = useState(false);
-
-  // Stand change skips access code — the change_stand RPC enforces the role check server-side
-  const valid = standId !== '' && (isChangingStand || accessCode.length === 4);
-
-  async function submit() {
-    if (!valid || submitting) return;
-    setSubmitting(true);
-    setAccessCodeError(null);
-    try {
-      if (isChangingStand) {
-        const result = await changeStand(standId);
-        if (!result.ok) {
-          setAccessCodeError(result.error ?? tx(T('Error al cambiar el stand', 'Error changing stand')));
-        } else {
-          onDone();
-        }
-      } else {
-        const result = await becomeStaff(standId, accessCode);
-        if (!result.ok) {
-          setAccessCodeError(result.error ?? tx(T('Código de acceso incorrecto', 'Wrong access code')));
-        }
-        // On success, becomeStaff already routes to /staff
-      }
-    } finally {
-      setSubmitting(false);
-    }
+  // No assignments → not staff anywhere
+  if (assignments.length === 0) {
+    return (
+      <div className="screen scr-anim">
+        <div className="wrap narrow" style={{ paddingTop: 30 }}>
+          <button className="kbtn" onClick={() => nav('landing')}>← {tx(T('Volver', 'Back'))}</button>
+          <div className="eyebrow mt10" style={{ color: 'var(--cyan)' }}>{tx(T('MODO STAFF', 'STAFF MODE'))}</div>
+          <h2 className="h1" style={{ marginTop: 8 }}>{tx(T('Sin asignación', 'No assignment'))}</h2>
+          <Card flat className="mt20" style={{ padding: 16, borderColor: 'var(--line)' }}>
+            <p className="t">
+              {loadError
+                ? tx(T('No se pudieron cargar tus asignaciones. Intenta de nuevo.', 'Could not load your assignments. Please try again.'))
+                : tx(T('No estás asignado a ningún stand. Pide a un administrador que te asigne.', 'You are not assigned to any stand. Ask an administrator to assign you.'))}
+            </p>
+          </Card>
+        </div>
+      </div>
+    );
   }
 
+  // Pick a stand
   return (
     <div className="screen scr-anim">
       <div className="wrap narrow" style={{ paddingTop: 30 }}>
         <button className="kbtn" onClick={() => nav('landing')}>← {tx(T('Volver', 'Back'))}</button>
-        <div className="eyebrow mt10" style={{ color: 'var(--cyan)' }}>
-          {isChangingStand ? tx(T('CAMBIAR STAND', 'CHANGE STAND')) : tx(T('REGISTRO STAFF', 'STAFF REGISTRATION'))}
+        <div className="eyebrow mt10" style={{ color: 'var(--cyan)' }}>{tx(T('MODO STAFF', 'STAFF MODE'))}</div>
+        <h2 className="h1" style={{ marginTop: 8 }}>{tx(T('Elige tu estación', 'Pick your station'))}</h2>
+
+        <div className="col mt20" style={{ gap: 10 }}>
+          {assignments.map((a) => {
+            const disabled = a.activity === null;
+            return (
+              <button
+                key={a.id}
+                disabled={disabled}
+                onClick={() => setActive(a)}
+                className="clickable"
+                style={{
+                  background: 'var(--panel)',
+                  border: '3px solid ' + (a.standAccent ?? 'var(--line)'),
+                  padding: '14px 16px', cursor: disabled ? 'not-allowed' : 'pointer',
+                  opacity: disabled ? 0.55 : 1,
+                  display: 'flex', alignItems: 'center', gap: 12, textAlign: 'left',
+                }}
+              >
+                {a.standIcon && <PixelSprite layers={[a.standIcon]} scale={2.4} />}
+                <div className="f1">
+                  <div className="pixel" style={{ fontSize: 8, color: 'var(--ink-3)' }}>{a.eventName}</div>
+                  <div className="pixel" style={{ fontSize: 12, color: a.standAccent ?? 'var(--ink)', marginTop: 4 }}>{a.standName}</div>
+                  <div className="t sm" style={{ color: 'var(--ink-2)', marginTop: 4 }}>
+                    {a.activity ? a.activity.name : tx(T('Sin actividad configurada', 'No activity configured'))}
+                  </div>
+                </div>
+                {!disabled && <span className="pixel" style={{ fontSize: 12, color: a.standAccent ?? 'var(--cyan)' }}>▶</span>}
+              </button>
+            );
+          })}
         </div>
-        <h2 className="h1" style={{ marginTop: 8 }}>
-          {isChangingStand ? tx(T('Selecciona tu stand', 'Select your stand')) : tx(T('Acceso para encargados', 'Staff access'))}
-        </h2>
-
-        {/* Read-only account header */}
-        {player && (
-          <Card corners raise className="mt20" style={{ display: 'grid', placeItems: 'center', padding: 22, background: 'var(--bg-2)' }}>
-            <AvatarStage baseId={player.baseId} pieces={[]} scale={9} />
-            <div className="pixel" style={{ fontSize: 11, color: 'var(--ink-2)', marginTop: 6 }}>
-              {player.name.toUpperCase()}
-            </div>
-          </Card>
-        )}
-
-        {/* Access code — only for first-time enrollment; stand change skips it */}
-        {!isChangingStand && (
-          <div className="mt20">
-            <label className="pixel" style={{ fontSize: 10, color: 'var(--ink-3)' }}>{tx(T('CÓDIGO DE ACCESO STAFF', 'STAFF ACCESS CODE'))}</label>
-            <input
-              value={accessCode}
-              maxLength={4}
-              inputMode="numeric"
-              onChange={e => { setAccessCode(e.target.value.replace(/\D/g, '').slice(0, 4)); setAccessCodeError(null); }}
-              placeholder="0000"
-              style={{
-                width: '100%', marginTop: 8, padding: '14px 14px', background: 'var(--panel)',
-                border: '3px solid ' + (accessCodeError ? 'var(--red, #ff4c4c)' : 'var(--line)'),
-                color: 'var(--ink)', fontFamily: 'var(--fontPixel)', fontSize: 24,
-                outline: 'none', textAlign: 'center', letterSpacing: 8,
-              }}
-              onFocus={e => { if (!accessCodeError) e.target.style.borderColor = 'var(--cyan)'; }}
-              onBlur={e => { if (!accessCodeError) e.target.style.borderColor = 'var(--line)'; }}
-            />
-            {accessCodeError && (
-              <div className="pixel mt6" style={{ fontSize: 9, color: 'var(--red, #ff4c4c)' }}>
-                {accessCodeError}
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Stand selector */}
-        <div className="pixel mt20" style={{ fontSize: 10, color: 'var(--ink-3)' }}>{tx(T('ELIGE TU STAND', 'SELECT YOUR STAND'))}</div>
-        <div className="col mt10" style={{ gap: 8 }}>
-          {STANDS.map(s => (
-            <button key={s.id} onClick={() => setStandId(s.id)} className="clickable"
-              style={{
-                background: standId === s.id ? 'var(--panel-hi)' : 'var(--panel)',
-                border: '3px solid ' + (standId === s.id ? s.accent : 'var(--line)'),
-                padding: '12px 14px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 12,
-                textAlign: 'left',
-              }}>
-              <PixelSprite layers={[s.icon]} scale={2} />
-              <span className="pixel" style={{ fontSize: 10, color: standId === s.id ? s.accent : 'var(--ink-2)' }}>
-                {tx(s.name)}
-              </span>
-            </button>
-          ))}
-        </div>
-
-        {/* Inline error for stand change */}
-        {isChangingStand && accessCodeError && (
-          <div className="pixel mt10" style={{ fontSize: 9, color: 'var(--red, #ff4c4c)' }}>
-            {accessCodeError}
-          </div>
-        )}
-
-        <Btn block size="lg" className="mt28" disabled={!valid || submitting} onClick={submit}>
-          {submitting
-            ? tx(T('Verificando...', 'Verifying...'))
-            : isChangingStand
-              ? tx(T('Confirmar cambio', 'Confirm change')) + ' ▶'
-              : tx(T('Entrar como staff', 'Enter as staff')) + ' ▶'}
-        </Btn>
       </div>
     </div>
   );
 }
 
-/* ── Console ─────────────────────────────────────────────────────────────────── */
+/* ── Scan mode ─────────────────────────────────────────────────────────────── */
 
-interface StaffConsoleProps {
+type Banner =
+  | { kind: 'ok'; name: string; points: number }
+  | { kind: 'dup'; name: string }
+  | { kind: 'err'; msg: string };
+
+interface ScanModeProps {
   lang: Lang;
-  nav: Nav;
-  player: Player;
-  onChangeStand: () => void;
+  assignment: StaffAssignment;
+  approveCompletion: (qrToken: string, activityId: string, position?: number) => Promise<ApproveResult>;
+  onBack: () => void;
+  onExit: () => void;
 }
 
-function StaffConsole({ lang, nav, player, onChangeStand }: StaffConsoleProps) {
+const DEDUP_WINDOW_MS = 2500;
+
+function ScanMode({ lang, assignment, approveCompletion, onBack, onExit }: ScanModeProps) {
   const tx = (o: Localized) => o[lang];
+  const activity = assignment.activity!; // guarded by the picker (disabled when null)
+  const isPosition = activity.scoreType === 'position';
+  const accent = assignment.standAccent ?? 'var(--cyan)';
 
-  const stand = STANDS.find(s => s.id === player.standId);
+  const [manualOpen, setManualOpen] = useState(false);
+  const [manualValue, setManualValue] = useState('');
+  const [position, setPosition] = useState<1 | 2 | 3>(1);
+  const [banner, setBanner] = useState<Banner | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [cameraError, setCameraError] = useState<QrCameraError | null>(null);
 
-  // Guard: if stand not found, prompt to re-register
-  if (!stand) {
-    return (
-      <div className="screen scr-anim">
-        <div className="wrap narrow" style={{ paddingTop: 30 }}>
-          <p className="t center-txt">{tx(T('Stand no encontrado. Regístrate de nuevo.', 'Stand not found. Please re-register.'))}</p>
-          <Btn block className="mt14" onClick={onChangeStand}>{tx(T('Registrarse', 'Register'))}</Btn>
-        </div>
-      </div>
-    );
+  const processingRef = useRef(false);
+  const recentRef = useRef<{ token: string; at: number } | null>(null);
+  const positionRef = useRef(position);
+  positionRef.current = position;
+
+  const credit = useCallback(async (rawToken: string) => {
+    const token = rawToken.trim();
+    if (!token || processingRef.current) return;
+
+    const now = Date.now();
+    const recent = recentRef.current;
+    if (recent && recent.token === token && now - recent.at < DEDUP_WINDOW_MS) return;
+    recentRef.current = { token, at: now };
+
+    processingRef.current = true;
+    setBusy(true);
+    try {
+      const res = await approveCompletion(token, activity.id, isPosition ? positionRef.current : undefined);
+      if (res.alreadyAwarded) {
+        setBanner({ kind: 'dup', name: res.playerName });
+        showToast({ title: tx(T('Ya participó aquí', 'Already participated here')), sub: res.playerName, sprite: 'flag' });
+      } else {
+        setBanner({ kind: 'ok', name: res.playerName, points: res.points });
+        showToast({ title: `✓ ${res.playerName}`, sub: `+${res.points}`, sprite: 'ticket' });
+      }
+    } catch (err) {
+      const code = (err as { code?: string })?.code;
+      const msg = code === '42501'
+        ? tx(T('No autorizado para este stand', 'Not authorized for this stand'))
+        : tx(T('Código inválido o desconocido', 'Invalid or unknown code'));
+      setBanner({ kind: 'err', msg });
+      showToast({ title: msg, sprite: 'flag' });
+    } finally {
+      processingRef.current = false;
+      setBusy(false);
+    }
+  }, [approveCompletion, activity.id, isPosition, lang]);
+
+  // Camera denied/unavailable → reveal manual entry automatically.
+  const handleCameraError = useCallback((kind: QrCameraError) => {
+    setCameraError(kind);
+    setManualOpen(true);
+  }, []);
+
+  function submitManual() {
+    const value = manualValue.trim();
+    if (!value || busy) return;
+    void credit(value);
+    setManualValue('');
   }
+
+  const pointsForPosition = (p: 1 | 2 | 3): number | null =>
+    p === 1 ? activity.pointsFirst : p === 2 ? activity.pointsSecond : activity.pointsThird;
 
   return (
     <div className="screen scr-anim">
       <div className="wrap narrow" style={{ paddingTop: 30 }}>
-        {/* staff header */}
+        {/* header */}
         <div className="spread">
-          <div className="row center" style={{ gap: 12 }}>
-            <Card flat style={{ padding: 6, background: 'var(--panel-2)' }}>
-              <Avatar baseId={player.baseId} pieces={[]} scale={3} />
-            </Card>
-            <div>
-              <div className="pixel" style={{ fontSize: 8, color: 'var(--cyan)' }}>{tx(T('MODO STAFF', 'STAFF MODE'))}</div>
-              <div className="pixel" style={{ fontSize: 13, color: 'var(--ink)' }}>{player.name.toUpperCase()}</div>
-            </div>
-          </div>
-          <button className="kbtn" onClick={() => nav('landing')}>✕</button>
+          <button className="kbtn" onClick={onBack}>← {tx(T('Estaciones', 'Stations'))}</button>
+          <button className="kbtn" onClick={onExit}>✕</button>
         </div>
 
-        {/* stand badge */}
-        <Card corners raise className="mt14" style={{ borderColor: stand.accent, background: 'var(--bg-2)', padding: 16 }}>
-          <div className="row center" style={{ gap: 12 }}>
-            <PixelSprite layers={[stand.icon]} scale={3} />
-            <div className="f1">
-              <div className="pixel" style={{ fontSize: 8, color: stand.accent }}>{tx(stand.tag)}</div>
-              <div className="h2" style={{ marginTop: 4 }}>{tx(stand.name)}</div>
-            </div>
+        <Card corners raise className="mt14" style={{ borderColor: accent, background: 'var(--bg-2)', padding: 16 }}>
+          <div className="pixel" style={{ fontSize: 8, color: accent }}>{assignment.standName.toUpperCase()}</div>
+          <div className="h2" style={{ marginTop: 6 }}>{activity.name}</div>
+          <div className="t sm" style={{ color: 'var(--ink-2)', marginTop: 4 }}>
+            {isPosition
+              ? tx(T('Puntos por posición', 'Points by position'))
+              : `+${activity.pointsFixed} ${tx(T('puntos', 'points'))}`}
           </div>
         </Card>
 
-        {/* the staff code — displayed big */}
-        <div className="mt20 center-txt">
-          <div className="pixel" style={{ fontSize: 10, color: 'var(--ink-3)', marginBottom: 10 }}>
-            {tx(T('CÓDIGO DEL STAND', 'STAND CODE'))}
-          </div>
-          <Card corners raise style={{
-            display: 'inline-block', padding: '18px 36px',
-            background: 'var(--panel)', borderColor: stand.accent,
-            boxShadow: `0 0 24px ${stand.accent}44`,
-          }}>
-            <div className="pixel" style={{ fontSize: 52, color: stand.accent, letterSpacing: 12 }}>
-              {stand.staffCode}
+        {/* position selector (position-scored activities only) */}
+        {isPosition && (
+          <div className="mt20">
+            <div className="pixel" style={{ fontSize: 10, color: 'var(--ink-3)', marginBottom: 8 }}>
+              {tx(T('POSICIÓN', 'POSITION'))}
             </div>
+            <div className="row" style={{ gap: 8 }}>
+              {([1, 2, 3] as const).map((p) => {
+                const pts = pointsForPosition(p);
+                return (
+                  <button
+                    key={p}
+                    onClick={() => setPosition(p)}
+                    className="clickable f1"
+                    style={{
+                      background: position === p ? 'var(--panel-hi)' : 'var(--panel)',
+                      border: '3px solid ' + (position === p ? accent : 'var(--line)'),
+                      padding: '12px 8px', cursor: 'pointer', textAlign: 'center',
+                    }}
+                  >
+                    <div className="pixel" style={{ fontSize: 16, color: position === p ? accent : 'var(--ink-2)' }}>{p}º</div>
+                    <div className="pixel" style={{ fontSize: 8, color: 'var(--ink-3)', marginTop: 4 }}>
+                      +{pts ?? 0}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* scanner */}
+        <div className="mt20" style={{ position: 'relative' }}>
+          {!cameraError ? (
+            <QrScanner onDecode={(t) => void credit(t)} onError={handleCameraError} />
+          ) : (
+            <Card flat style={{ padding: 16, borderColor: 'var(--line)' }}>
+              <p className="t sm" style={{ color: 'var(--ink-2)' }}>
+                {cameraError === 'permission'
+                  ? tx(T('Cámara bloqueada. Usa el ingreso manual del código.', 'Camera blocked. Use manual code entry.'))
+                  : tx(T('Cámara no disponible. Usa el ingreso manual del código.', 'Camera unavailable. Use manual code entry.'))}
+              </p>
+            </Card>
+          )}
+          {busy && (
+            <div className="pixel" style={{ position: 'absolute', top: 8, left: 8, fontSize: 9, color: accent, background: 'rgba(0,0,0,.6)', padding: '4px 6px' }}>
+              {tx(T('REGISTRANDO...', 'CREDITING...'))}
+            </div>
+          )}
+        </div>
+
+        {/* last-scan feedback (reliable in station mode, beyond the toast) */}
+        {banner && (
+          <Card
+            flat
+            className="mt14"
+            style={{
+              padding: 14,
+              borderColor: banner.kind === 'ok' ? 'var(--cyan)' : banner.kind === 'dup' ? 'var(--orange)' : 'var(--red, #ff4c4c)',
+              background: 'var(--panel-2)',
+            }}
+          >
+            {banner.kind === 'ok' && (
+              <div className="pixel" style={{ fontSize: 12, color: 'var(--cyan)' }}>✓ {banner.name} +{banner.points}</div>
+            )}
+            {banner.kind === 'dup' && (
+              <div className="pixel" style={{ fontSize: 11, color: 'var(--orange)' }}>{tx(T('Ya participó aquí', 'Already participated here'))} · {banner.name}</div>
+            )}
+            {banner.kind === 'err' && (
+              <div className="pixel" style={{ fontSize: 10, color: 'var(--red, #ff4c4c)' }}>{banner.msg}</div>
+            )}
           </Card>
-        </div>
+        )}
 
-        {/* instructions */}
-        <Card flat className="mt20" style={{ padding: 14, borderColor: 'var(--cyan)', background: 'var(--panel-2)' }}>
-          <div className="pixel" style={{ fontSize: 9, color: 'var(--cyan)', marginBottom: 8 }}>
-            {tx(T('INSTRUCCIONES', 'INSTRUCTIONS'))}
+        {/* manual entry — always available */}
+        <Btn block variant="ghost" size="sm" className="mt20" onClick={() => setManualOpen((v) => !v)}>
+          {tx(T('Ingresar código', 'Type code'))}
+        </Btn>
+
+        {manualOpen && (
+          <div className="mt14">
+            <label className="pixel" style={{ fontSize: 10, color: 'var(--ink-3)' }}>{tx(T('CÓDIGO DEL JUGADOR', 'PLAYER CODE'))}</label>
+            <input
+              value={manualValue}
+              onChange={(e) => setManualValue(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') submitManual(); }}
+              placeholder={tx(T('Pega o escribe el código', 'Paste or type the code'))}
+              autoCapitalize="off"
+              autoCorrect="off"
+              spellCheck={false}
+              style={{
+                width: '100%', marginTop: 8, padding: '12px 14px', background: 'var(--panel)',
+                border: '3px solid var(--line)', color: 'var(--ink)', fontFamily: 'var(--fontPixel)',
+                fontSize: 14, outline: 'none',
+              }}
+            />
+            <Btn block size="sm" className="mt10" disabled={!manualValue.trim() || busy} onClick={submitManual}>
+              {tx(T('Registrar', 'Credit'))} ▶
+            </Btn>
           </div>
-          <p className="t sm">
-            {tx(T(
-              'Cuando un jugador complete una actividad, ingresa este código en SU teléfono.',
-              'When a player completes an activity, enter this code on THEIR phone.'
-            ))}
-          </p>
-        </Card>
-
-        {/* activities reference */}
-        <div className="eyebrow mt20" style={{ marginBottom: 10 }}>{tx(T('Actividades del stand', 'Stand activities'))}</div>
-        <div className="col" style={{ gap: 8 }}>
-          {stand.activities.map(act => (
-            <Card key={act.id} flat style={{ padding: 10, display: 'flex', alignItems: 'center', gap: 12 }}>
-              <div className="f1 t" style={{ color: 'var(--ink)' }}>{tx(act.name)}</div>
-              <div className="coin" style={{ fontSize: 9 }}>
-                <PixelSprite layers={['ticket']} scale={1.4} /> +{act.tickets}
-              </div>
-            </Card>
-          ))}
-        </div>
-
-        <Btn block size="sm" className="mt20" onClick={() => nav('leaderboard')}>
-          {tx(T('Ver ranking', 'View leaderboard'))}
-        </Btn>
-
-        <Btn block variant="ghost" size="sm" className="mt14" onClick={onChangeStand}>
-          {tx(T('Cambiar stand', 'Change stand'))}
-        </Btn>
+        )}
       </div>
+    </div>
+  );
+}
+
+function Centered({ children }: { children: React.ReactNode }) {
+  return (
+    <div style={{ position: 'fixed', inset: 0, display: 'grid', placeItems: 'center', background: 'var(--bg)' }}>
+      {children}
     </div>
   );
 }

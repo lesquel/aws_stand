@@ -19,7 +19,13 @@ import { approveActivity } from '../../application/approve-activity';
 import { claimPrize } from '../../application/claim-prize';
 import { load, save, clear } from '../../infrastructure/local-storage-game-repository';
 import { getSupabase, supabaseConfigured } from '../../infrastructure/supabase-client';
-import { fetchProfile, becomeStaffRpc, changeStandRpc } from '../../infrastructure/supabase-game-repository';
+import { fetchProfile } from '../../infrastructure/supabase-game-repository';
+import {
+  fetchMyAssignments,
+  approveCompletion as approveCompletionRpc,
+  type StaffAssignment,
+  type ApproveResult,
+} from '../../infrastructure/supabase-staff-repository';
 import { joinEvent, saveParticipation } from '../../infrastructure/supabase-participation-repository';
 import { fetchActiveEvents, type ActiveEvent } from '../../infrastructure/supabase-events-repository';
 import { showToast } from '../feedback/toast';
@@ -76,8 +82,8 @@ interface GameContextValue {
   signUp: (p: { username: string; email: string; password: string; baseId: string }) => Promise<void>;
   signIn: (p: { email: string; password: string }) => Promise<void>;
   signOut: () => Promise<void>;
-  becomeStaff: (standId: string, accessCode: string) => Promise<{ ok: boolean; error?: string }>;
-  changeStand: (standId: string) => Promise<{ ok: boolean; error?: string }>;
+  getStaffAssignments: () => Promise<StaffAssignment[]>;
+  approveCompletion: (qrToken: string, activityId: string, position?: number) => Promise<ApproveResult>;
   authError: string | null;
   authLoading: boolean;
   confirmPending: boolean;
@@ -447,29 +453,25 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     router.push('/');
   }
 
-  async function becomeStaff(standId: string, accessCode: string): Promise<{ ok: boolean; error?: string }> {
-    if (!supabase || !session || !player) return { ok: false };
-    const ok = await becomeStaffRpc(supabase, standId, accessCode);
-    if (!ok) {
-      return { ok: false, error: tx(T('Código de acceso incorrecto', 'Wrong access code')) };
-    }
-    // Keep DB username and baseId — only update role/standId locally
-    setPlayer({ ...player, role: 'staff', standId });
-    setTimeout(() => showToast({ title: tx(T('¡Bienvenido al staff!', 'Welcome to staff!')), sprite: 'flag' }), 250);
-    router.push('/staff');
-    return { ok: true };
+  // ── Staff scan (SP3) ────────────────────────────────────────────────────────
+  // Staff are admin-assigned (SP2); there is no self-enrollment. These helpers
+  // bind the authenticated client to the staff-scan repository so the staff
+  // screen owns its own loading/scan state without holding it in the provider.
+
+  async function getStaffAssignments(): Promise<StaffAssignment[]> {
+    if (!supabase || !session) return [];
+    return fetchMyAssignments(supabase);
   }
 
-  async function changeStand(standId: string): Promise<{ ok: boolean; error?: string }> {
-    if (!supabase || !session || !player) return { ok: false };
-    const ok = await changeStandRpc(supabase, standId);
-    if (!ok) {
-      return { ok: false, error: tx(T('No se pudo cambiar el stand', 'Could not change stand')) };
+  async function approveCompletion(
+    qrToken: string,
+    activityId: string,
+    position?: number,
+  ): Promise<ApproveResult> {
+    if (!supabase || !session) {
+      throw new Error('Not authenticated');
     }
-    setPlayer({ ...player, standId });
-    setTimeout(() => showToast({ title: tx(T('Stand actualizado', 'Stand updated')), sub: player.name, sprite: 'flag' }), 250);
-    router.push('/staff');
-    return { ok: true };
+    return approveCompletionRpc(supabase, qrToken, activityId, position);
   }
 
   // ── Actions ────────────────────────────────────────────────────────────────
@@ -588,7 +590,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       lang, setLang, heroLayout, scanlines, soundOn, setTweak,
       player, progress, actions, nav, selectedEventId,
       stands, prizes, catalogLoading, standById, prizeById,
-      signUp, signIn, signOut, becomeStaff, changeStand,
+      signUp, signIn, signOut, getStaffAssignments, approveCompletion,
       authError, authLoading, confirmPending,
     }}>
       {children}

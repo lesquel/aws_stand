@@ -6,7 +6,7 @@ import { useGame } from '@/presentation/state/game-provider';
 import { StaffScreen } from '@/presentation/screens/staff';
 
 export default function StaffPage() {
-  const { lang, nav, player, becomeStaff, changeStand, authLoading } = useGame();
+  const { lang, nav, getStaffAssignments, approveCompletion, authLoading, player } = useGame();
   const router = useRouter();
 
   // Not logged in → redirect to login (wait for auth to settle first)
@@ -17,5 +17,12 @@ export default function StaffPage() {
 
   if (authLoading || !player) return null;
 
-  return <StaffScreen lang={lang} nav={nav} player={player} becomeStaff={becomeStaff} changeStand={changeStand} />;
+  return (
+    <StaffScreen
+      lang={lang}
+      nav={nav}
+      getStaffAssignments={getStaffAssignments}
+      approveCompletion={approveCompletion}
+    />
+  );
 }

@@ -165,8 +165,13 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       if (!mounted) return;
       setSession(s);
       if (s) {
-        await loadProfile(s);
-        setAuthLoading(false);
+        try {
+          await loadProfile(s);
+        } catch (err) {
+          console.error('[loadProfile] failed:', err);
+        } finally {
+          setAuthLoading(false);
+        }
       } else {
         setPlayer(null);
         setProgress(emptyProgress());
@@ -252,10 +257,20 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     setProgress(withVisited);
   }
 
-  // Player picks an event from the multi-event picker → join and load it.
+  // Player picks an event from the multi-event picker → join and load it. A join
+  // failure (network / RPC) must not crash the picker: surface a toast and let
+  // the player retry by tapping another event.
   async function selectEvent(eventId: string) {
     if (!supabase) return;
-    await joinAndLoad(eventId);
+    try {
+      await joinAndLoad(eventId);
+    } catch (err) {
+      console.error('[selectEvent] join failed:', err);
+      showToast({
+        title: tx(T('Error al unirse al evento', 'Could not join the event')),
+        sprite: 'flag',
+      });
+    }
   }
 
   // Write-behind: debounced participation save to Supabase when a session and an

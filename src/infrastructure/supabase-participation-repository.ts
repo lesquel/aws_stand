@@ -109,28 +109,8 @@ export async function fetchParticipation(
   return rowToParticipation(data);
 }
 
-/**
- * Persist the gameplay columns of the caller's participation. The update is
- * scoped to (player_id, event_id); `userId` is passed explicitly so callers can
- * validate it against the live session (write-behind discipline), and RLS
- * independently restricts the row to auth.uid().
- */
-export async function saveParticipation(
-  supabase: SupabaseClient,
-  userId: string,
-  eventId: string,
-  progress: Progress,
-): Promise<void> {
-  const { error } = await supabase
-    .from('participations')
-    .update({
-      tickets: progress.tickets,
-      pieces: progress.pieces,
-      badges: progress.badges,
-      claimed: progress.claimed,
-      done_activities: progress.doneActivities,
-    })
-    .eq('player_id', userId)
-    .eq('event_id', eventId);
-  if (error) throw error;
-}
+// NOTE: there is intentionally NO client write function here anymore. Since the
+// SP3 capstone (migration 0008) the client UPDATE grant on participations is
+// revoked: the ledger is mutated ONLY by SECURITY DEFINER RPCs (join_event,
+// approve_completion, correct_points, claim_prize). The client READS its
+// participation (joinEvent / fetchParticipation) and never writes it.

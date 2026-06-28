@@ -193,17 +193,14 @@ describe('SP3 claim_prize — server-authoritative prize claiming', () => {
   });
 
   /**
-   * DEFERRED — the SP1 self-mutation hole (direct `update participations set
-   * tickets=9999`) is NOT closed by this change. The broad client UPDATE grant
-   * `update (tickets, pieces, badges, claimed, done_activities)` is still required
-   * by the live StandScreen "Validar" path (actions.approve → approveActivity →
-   * write-behind saveParticipation), which awards tickets/pieces/badges/
-   * done_activities entirely client-side. Revoking the grant now would break that
-   * gameplay path. Closing the hole requires first moving stand approval
-   * server-side (the documented `approve_activity` RPC follow-up). Once that lands
-   * and the grant is revoked in a follow-up migration, un-skip this test.
+   * SP1 hole CLOSED (migration 0008) — the legacy client self-approve path is
+   * gone, so the broad participations UPDATE grant and its RLS update policy were
+   * revoked. A direct `update participations set tickets = 9999` by the owning
+   * player must now be rejected: participations are mutated ONLY by SECURITY
+   * DEFINER RPCs (join_event / approve_completion / correct_points / claim_prize).
+   * This assertion is RED until 0008 is applied.
    */
-  it.skip('rejects a direct client participation write once the grant is revoked', async () => {
+  it('rejects a direct client participation write once the grant is revoked', async () => {
     await seedParticipation(5);
 
     const { error } = await playerClient

@@ -6,14 +6,16 @@
  *  - joinEvent() goes through the SECURITY DEFINER join_event RPC, creating a
  *    clean participation (tickets 0, empty arrays) for the active event.
  *  - fetchParticipation() returns the caller's own participation.
- *  - saveParticipation() persists the gameplay columns (tickets/pieces/badges/
- *    claimed/done_activities) and a re-fetch reflects them.
- *  - join is idempotent on (player_id, event_id).
- *  - RLS: a player cannot write another player's participation.
+ *  - join is idempotent on (player_id, event_id) and never wipes a populated
+ *    ledger.
+ *  - HARDENED CONTRACT (SP3 capstone, migration 0008): the client has NO write
+ *    grant on participations. A direct client UPDATE is rejected; the ledger is
+ *    mutated only by SECURITY DEFINER RPCs. (Pre-0008 this file asserted the old
+ *    client-writable behavior via saveParticipation, now removed.)
  *
  * Mirrors catalog-repo.test.ts: a throwaway user is signed into an anon client
  * to reproduce the authenticated browser path; service-role is used only for
- * setup/teardown and cross-user assertions.
+ * setup/teardown, populating ledgers, and cross-user assertions.
  */
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import {
@@ -26,10 +28,8 @@ import {
 import {
   joinEvent,
   fetchParticipation,
-  saveParticipation,
 } from '../../src/infrastructure/supabase-participation-repository';
 import { emptyProgress } from '../../src/domain/progress';
-import type { Progress } from '../../src/domain/types';
 
 const EVENT_SLUG = 'aws-cloud-quest';
 
@@ -98,58 +98,80 @@ describe('SP1 participation repository — join + per-event progress', () => {
     expect(participation!.progress.tickets).toBe(0);
   });
 
-  it('join is idempotent on (player_id, event_id)', async () => {
+  it('join is idempotent on (player_id, event_id) and never wipes a populated ledger', async () => {
     const first = await joinEvent(authedA, eventId);
     const second = await joinEvent(authedA, eventId);
     expect(second.id).toBe(first.id);
-    // Re-joining must not wipe a populated ledger…
-    const populated: Progress = {
-      ...emptyProgress(),
-      tickets: 7,
-      doneActivities: ['c1'],
-    };
-    await saveParticipation(authedA, userAId, eventId, populated);
+
+    // Populate the ledger with service-role (the client can no longer write it),
+    // then re-join: join_event uses `on conflict do nothing`, so it must not wipe.
+    const service = serviceClient();
+    const { error: seedErr } = await service
+      .from('participations')
+      .update({ tickets: 7, done_activities: ['c1'] })
+      .eq('player_id', userAId)
+      .eq('event_id', eventId);
+    expect(seedErr).toBeNull();
+
     const third = await joinEvent(authedA, eventId);
     expect(third.id).toBe(first.id);
     expect(third.progress.tickets).toBe(7);
     expect(third.progress.doneActivities).toEqual(['c1']);
   });
 
-  it('saveParticipation persists the gameplay columns and a re-fetch reflects them', async () => {
+  it('rejects a direct client write of the caller’s own participation (no UPDATE grant)', async () => {
     await joinEvent(authedA, eventId);
-    const next: Progress = {
-      ...emptyProgress(),
-      tickets: 42,
-      pieces: ['cap', 'visor'],
-      badges: ['explorer'],
-      claimed: ['grand'],
-      doneActivities: ['c1', 'b1'],
-    };
-    await saveParticipation(authedA, userAId, eventId, next);
 
-    const reloaded = await fetchParticipation(authedA, eventId);
-    expect(reloaded).not.toBeNull();
-    expect(reloaded!.progress.tickets).toBe(42);
-    expect(reloaded!.progress.pieces).toEqual(['cap', 'visor']);
-    expect(reloaded!.progress.badges).toEqual(['explorer']);
-    expect(reloaded!.progress.claimed).toEqual(['grand']);
-    expect(reloaded!.progress.doneActivities).toEqual(['c1', 'b1']);
-    // lastPiece is a transient unlock signal — never restored from storage.
-    expect(reloaded!.progress.lastPiece).toBeNull();
-    // visitedStands is not a stored column — repo returns it empty (the provider
-    // re-derives it from doneActivities against the catalog).
-    expect(reloaded!.progress.visitedStands).toEqual([]);
+    // Reset to a known baseline with service-role, then attempt a self-award.
+    const service = serviceClient();
+    await service
+      .from('participations')
+      .update({ tickets: 0 })
+      .eq('player_id', userAId)
+      .eq('event_id', eventId);
+
+    const { error } = await authedA
+      .from('participations')
+      .update({ tickets: 42 })
+      .eq('player_id', userAId)
+      .eq('event_id', eventId);
+
+    // After 0008 the UPDATE grant is gone: either a permission error or a
+    // zero-row update — never a successful mutation.
+    if (!error) {
+      const { data: changed } = await authedA
+        .from('participations')
+        .update({ tickets: 42 })
+        .eq('player_id', userAId)
+        .eq('event_id', eventId)
+        .select('id');
+      expect(changed ?? []).toHaveLength(0);
+    } else {
+      expect(error).not.toBeNull();
+    }
+
+    // Authoritative check: the ledger is unchanged.
+    const { data } = await service
+      .from('participations')
+      .select('tickets')
+      .eq('player_id', userAId)
+      .eq('event_id', eventId)
+      .single();
+    expect(data!.tickets).toBe(0);
   });
 
-  it('does not let a player write another player’s participation (RLS)', async () => {
+  it('does not let a player write another player’s participation', async () => {
     // Both players hold their own clean participation.
     await joinEvent(authedA, eventId);
     await joinEvent(authedB, eventId);
 
-    // A attempts to overwrite B's row (same event, B's id). RLS scopes the
-    // UPDATE to auth.uid() = A, so zero rows match: no error, no effect.
-    const tampered: Progress = { ...emptyProgress(), tickets: 9999 };
-    await saveParticipation(authedA, userBId, eventId, tampered);
+    // A attempts to overwrite B's row. With no client UPDATE grant this is
+    // rejected (or matches zero rows); B's row stays untouched either way.
+    await authedA
+      .from('participations')
+      .update({ tickets: 9999 })
+      .eq('player_id', userBId)
+      .eq('event_id', eventId);
 
     // Verify B's row is untouched, read with service-role to bypass RLS.
     const service = serviceClient();

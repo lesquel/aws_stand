@@ -1,7 +1,7 @@
 export type Lang = 'es' | 'en';
 export interface Localized { es: string; en: string; }
 export type PieceId = 'cap' | 'visor' | 'shield' | 'backpack' | 'boots';
-export type Role = 'player' | 'staff';
+export type Role = 'player' | 'staff' | 'admin';
 export interface Activity { id: string; name: Localized; tickets: number; special?: boolean; }
 export interface Piece { id: PieceId; sprite: string; slot: Localized; name: Localized; color: string; }
 export interface Stand {

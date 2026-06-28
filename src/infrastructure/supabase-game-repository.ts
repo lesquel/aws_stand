@@ -16,10 +16,14 @@ export interface ProfileData {
   role: Role;
 }
 
-// Map the DB role to the app's player/staff distinction. The 'admin' role is a
-// future SP2 concern; until the admin UI exists it plays as a regular player.
-function toAppRole(role: ProfileRow['role']): Role {
-  return role === 'staff' ? 'staff' : 'player';
+// Map the DB role to the app's role model. The DB stores 'participant' for the
+// default player; the app calls that 'player'. 'staff' and 'admin' pass through
+// unchanged so route guards and SP2's admin console can branch on them.
+// Exported for direct unit coverage of the mapping.
+export function toAppRole(role: ProfileRow['role']): Role {
+  if (role === 'staff') return 'staff';
+  if (role === 'admin') return 'admin';
+  return 'player';
 }
 
 export async function fetchProfile(supabase: SupabaseClient, userId: string): Promise<ProfileData | null> {

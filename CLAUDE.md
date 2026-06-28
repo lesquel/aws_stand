@@ -11,19 +11,28 @@ infrastructure / presentation).
 
 ## Environment variables
 
-The app reads **exactly two** env vars (`src/infrastructure/supabase-client.ts`):
+The **browser app** reads **exactly two** env vars (`src/infrastructure/supabase-client.ts`):
 
 - `NEXT_PUBLIC_SUPABASE_URL`
 - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
 
-There are no other `process.env.*` references. Both are public (browser client); access control is
-enforced by RLS + column grants, not by hiding the key. Without them the app runs in
+The app runtime has no other `process.env.*` references. Both are public (browser client); access
+control is enforced by RLS + column grants, not by hiding the key. Without them the app runs in
 localStorage-only fallback (`supabaseConfigured()` returns `false`).
+
+Two additional vars are **server-side only** — read by integration tests and tooling, never bundled
+into the browser:
+
+- `SUPABASE_SERVICE_ROLE_KEY` — bypasses RLS; used by the test harness (`test/helpers/supabase.ts`)
+  and the admin allowlist seed. Never expose it client-side.
+- `ADMIN_EMAILS` — comma-separated emails seeded into `admin_allowlist` via `npm run seed:admin`
+  (`scripts/seed-admin-allowlist.ts`). Do not print its value. Not read by the app runtime.
 
 An optional `NEXT_PUBLIC_SUPABASE_BUCKET` is documented as a **reserved placeholder** for future
 storage. No code reads it today — do not treat it as active config until file uploads are built.
 
-Local: `.env.local` in the project root. Deployed: same two vars in Vercel project settings.
+Local: `.env.local` in the project root. Deployed: the two `NEXT_PUBLIC_*` vars in Vercel project
+settings (the server-side vars are for tests/tooling, not the deployed runtime).
 
 ## Storage buckets
 
@@ -46,6 +55,14 @@ Local: `.env.local` in the project root. Deployed: same two vars in Vercel proje
 - The staff access code is hardcoded as `'4242'` inside `become_staff` — change it per event.
 - Valid stand ids: `cloud`, `ia`, `sec`, `crew`, `build`.
 - Email confirmation must be **disabled** in Supabase Auth (signup logs in immediately).
+- **Admin bootstrap:** there is no in-app admin promotion. The `handle_new_user` signup trigger
+  grants `role = 'admin'` when the new user's email is in the service-role-only `admin_allowlist`
+  table. Populate it from `ADMIN_EMAILS` via `npm run seed:admin`, then have the allowlisted person
+  sign up normally. The app maps DB `admin` → app `admin` (`toAppRole`) and guards the `/admin`
+  route (placeholder UI; the full console is SP2). DB `participant` maps to app `player`.
+- **Multi-event:** the live schema (`supabase/migrations/`) has superseded the single-event
+  `supabase/schema.sql`. Identity is in `profiles`; per-event progress is in `participations`; the
+  catalog is event-scoped. Treat the migrations dir as the source of truth for the current schema.
 
 ## Conventions
 

@@ -201,7 +201,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     try {
       const profile = await fetchProfile(supabase, s.user.id);
       if (!profile) return;
-      setPlayer({ name: profile.username, baseId: profile.baseId, role: profile.role });
+      setPlayer({ name: profile.username, baseId: profile.baseId, role: profile.role, qrToken: profile.qrToken });
 
       // Resolve joinable events. Exactly one → auto-select & join (single-event
       // feel). Several → keep them and let the player pick (each pick joins).

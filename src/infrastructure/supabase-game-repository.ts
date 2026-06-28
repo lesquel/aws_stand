@@ -8,12 +8,16 @@ interface ProfileRow {
   username: string;
   base_id: string;
   role: 'participant' | 'staff' | 'admin';
+  // Unique per participant (RN-01). The value the staff scanner reads and passes
+  // to `approve_completion`; the player renders it as a scannable QR (CA-02).
+  qr_token: string;
 }
 
 export interface ProfileData {
   username: string;
   baseId: string;
   role: Role;
+  qrToken: string;
 }
 
 // Map the DB role to the app's role model. The DB stores 'participant' for the
@@ -26,16 +30,23 @@ export function toAppRole(role: ProfileRow['role']): Role {
   return 'player';
 }
 
+// Pure row → app-profile mapping. Extracted for direct unit coverage so the
+// qr_token threading (DB → player state) is verified without a database.
+export function mapProfileRow(row: ProfileRow): ProfileData {
+  return {
+    username: row.username,
+    baseId: row.base_id,
+    role: toAppRole(row.role),
+    qrToken: row.qr_token,
+  };
+}
+
 export async function fetchProfile(supabase: SupabaseClient, userId: string): Promise<ProfileData | null> {
   const { data, error } = await supabase
     .from('profiles')
-    .select('id,username,base_id,role')
+    .select('id,username,base_id,role,qr_token')
     .eq('id', userId)
     .single<ProfileRow>();
   if (error || !data) return null;
-  return {
-    username: data.username,
-    baseId: data.base_id,
-    role: toAppRole(data.role),
-  };
+  return mapProfileRow(data);
 }

@@ -16,7 +16,7 @@ export interface Progress {
 }
 export interface Badge { id: string; icon: string; name: Localized; desc: Localized; check: (p: Progress) => boolean; }
 export interface Prize { id: string; sprite: string; name: Localized; cost: number; stock: number; raffle?: boolean; }
-export interface Player { name: string; baseId: string; role?: Role; standId?: string; }
+export interface Player { name: string; baseId: string; role?: Role; standId?: string; qrToken?: string; }
 export interface GameState { player: Player | null; progress: Progress; }
 export interface Rewards { tickets: number; piece: PieceId | null; badges: string[]; }
 /** App.complete() returns this to screens (rewards, or {tickets:0} on no-op). */

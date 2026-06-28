@@ -10,7 +10,8 @@ import React, { createContext, useContext, useState, useEffect, useRef } from 'r
 import { useRouter } from 'next/navigation';
 import type { Session } from '@supabase/supabase-js';
 import { T } from '../../domain/i18n';
-import { PIECES, standById, prizeById, decrementStock } from '../../domain/catalog';
+import { PIECES, STANDS, PRIZES, decrementStock } from '../../domain/catalog';
+import { loadCatalog } from '../../infrastructure/supabase-catalog-repository';
 import { emptyProgress } from '../../domain/progress';
 import { badgeById } from '../../domain/badges';
 import { completeActivity } from '../../application/complete-activity';
@@ -23,7 +24,7 @@ import { showToast } from '../feedback/toast';
 import { fireConfetti } from '../feedback/confetti';
 import { setSoundEnabled, primeAudio, playClick, playSuccess, playUnlock, playPrize } from '../feedback/sound';
 import { useTweaks } from '../components/tweaks-panel';
-import type { Lang, Progress, Player, CompleteResult, Localized, Actions, Nav, Role } from '../../domain/types';
+import type { Lang, Progress, Player, CompleteResult, Localized, Actions, Nav, Role, Stand, Prize } from '../../domain/types';
 
 // Screens that require a logged-in player
 const IN_APP = ['home', 'stand', 'avatar', 'badges', 'prizes'];
@@ -63,6 +64,11 @@ interface GameContextValue {
   progress: Progress;
   actions: Actions;
   nav: Nav;
+  stands: Stand[];
+  prizes: Prize[];
+  catalogLoading: boolean;
+  standById: (id: string) => Stand | undefined;
+  prizeById: (id: string) => Prize | undefined;
   signUp: (p: { username: string; email: string; password: string; baseId: string }) => Promise<void>;
   signIn: (p: { email: string; password: string }) => Promise<void>;
   signOut: () => Promise<void>;
@@ -100,6 +106,18 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
   const [authLoading, setAuthLoading] = useState(true);
   const [authError, setAuthError] = useState<string | null>(null);
   const [confirmPending, setConfirmPending] = useState(false);
+
+  // Event catalog (stands + prizes) read from the DB for the active event, with
+  // a static fallback. `catalog` is null until the first load resolves.
+  const [catalog, setCatalog] = useState<{ stands: Stand[]; prizes: Prize[] } | null>(null);
+  const [catalogLoading, setCatalogLoading] = useState(true);
+
+  // Resolved catalog views: DB-backed when loaded, static otherwise. Lookups are
+  // context-aware so consumers never import the static helpers for runtime data.
+  const stands = catalog?.stands ?? STANDS;
+  const prizes = catalog?.prizes ?? PRIZES;
+  const standById = (id: string): Stand | undefined => stands.find(s => s.id === id);
+  const prizeById = (id: string): Prize | undefined => prizes.find(p => p.id === id);
 
   // Debounce timer for write-behind progress saves
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -225,6 +243,32 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (!supabase && !authLoading) save({ player, progress });
   }, [player, progress, authLoading, supabase]);
+
+  // Load the event catalog. Offline (no Supabase) → static catalog immediately.
+  // Online → catalog reads are RLS-gated to authenticated, so wait for a session,
+  // then load from the DB and fall back to static on any error.
+  useEffect(() => {
+    let active = true;
+    async function run() {
+      if (!supabase) {
+        const data = await loadCatalog(null);
+        if (active) { setCatalog(data); setCatalogLoading(false); }
+        return;
+      }
+      if (!session) return; // wait until authenticated before reading the catalog
+      setCatalogLoading(true);
+      try {
+        const data = await loadCatalog(supabase);
+        if (active) { setCatalog(data); setCatalogLoading(false); }
+      } catch (err) {
+        console.warn('[loadCatalog] DB read failed; using static catalog:', err);
+        if (active) { setCatalog({ stands: STANDS, prizes: PRIZES }); setCatalogLoading(false); }
+      }
+    }
+    run();
+    return () => { active = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [supabase, session]);
 
   // Keep sound engine in sync with tweak
   useEffect(() => { setSoundEnabled(soundOn); }, [soundOn]);
@@ -427,6 +471,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     <GameContext.Provider value={{
       lang, setLang, heroLayout, scanlines, soundOn, setTweak,
       player, progress, actions, nav,
+      stands, prizes, catalogLoading, standById, prizeById,
       signUp, signIn, signOut, becomeStaff, changeStand,
       authError, confirmPending,
     }}>

@@ -6,7 +6,8 @@
 
 import { T } from '../../domain/i18n';
 import { BADGES } from '../../domain/badges';
-import { PRIZES, STANDS, PIECES } from '../../domain/catalog';
+import { PIECES } from '../../domain/catalog';
+import { useGame } from '../state/game-provider';
 import { Card, Btn } from '../components/ui-kit';
 import { PixelSprite } from '../components/sprites';
 import type { Lang, Nav, Progress, Actions, Localized } from '../../domain/types';
@@ -54,6 +55,7 @@ interface PrizesScreenProps { lang: Lang; progress: Progress; actions: Actions; 
 /* ---------------- PRIZES ---------------- */
 export function PrizesScreen({ lang, progress, actions }: PrizesScreenProps) {
   const tx = (o: Localized) => o[lang];
+  const { prizes } = useGame();
   return (
     <div className="screen scr-anim">
       <div className="wrap">
@@ -68,7 +70,7 @@ export function PrizesScreen({ lang, progress, actions }: PrizesScreenProps) {
         </div>
 
         <div className="grid mt20" style={{ gridTemplateColumns: 'repeat(auto-fill,minmax(240px,1fr))' }}>
-          {PRIZES.map(pz => {
+          {prizes.map(pz => {
             const claimed = progress.claimed.includes(pz.id);
             const canBuy = progress.tickets >= pz.cost && !claimed && pz.stock > 0;
             return (
@@ -102,6 +104,7 @@ interface DashboardScreenProps { lang: Lang; nav: Nav; progress: Progress; }
 /* ---------------- ORGANIZER DASHBOARD ---------------- */
 export function DashboardScreen({ lang, nav, progress }: DashboardScreenProps) {
   const tx = (o: Localized) => o[lang];
+  const { stands, prizes } = useGame();
   // mock aggregate data + live player's contribution
   const baseVisits: Record<string, number> = { cloud: 184, ia: 156, sec: 132, crew: 171, build: 98 };
   const kpis = [
@@ -138,7 +141,7 @@ export function DashboardScreen({ lang, nav, progress }: DashboardScreenProps) {
           <Card corners style={{ padding: 18 }}>
             <div className="h2" style={{ fontSize: 12 }}>{tx(T('Participación por stand', 'Participation by stand'))}</div>
             <div className="col mt20" style={{ gap: 14 }}>
-              {STANDS.map(s => {
+              {stands.map(s => {
                 const v = baseVisits[s.id];
                 return (
                   <div key={s.id}>
@@ -159,7 +162,7 @@ export function DashboardScreen({ lang, nav, progress }: DashboardScreenProps) {
           <Card corners style={{ padding: 18 }}>
             <div className="spread"><div className="h2" style={{ fontSize: 12 }}>{tx(T('Gestión de stands', 'Manage stands'))}</div></div>
             <div className="col mt14" style={{ gap: 8 }}>
-              {STANDS.map(s => (
+              {stands.map(s => (
                 <div key={s.id} className="row center" style={{ gap: 10, background: 'var(--panel-2)', border: '2px solid var(--line)', padding: 8 }}>
                   <PixelSprite layers={[s.icon]} scale={1.5} />
                   <div className="f1">
@@ -178,7 +181,7 @@ export function DashboardScreen({ lang, nav, progress }: DashboardScreenProps) {
         <Card corners className="mt20" style={{ padding: 18 }}>
           <div className="h2" style={{ fontSize: 12 }}>{tx(T('Inventario de premios', 'Prize inventory'))}</div>
           <div className="grid mt14" style={{ gridTemplateColumns: 'repeat(auto-fill,minmax(220px,1fr))' }}>
-            {PRIZES.map(p => (
+            {prizes.map(p => (
               <div key={p.id} className="row center" style={{ gap: 12, background: 'var(--panel-2)', border: '2px solid var(--line)', padding: 10 }}>
                 <PixelSprite layers={[p.sprite]} scale={1.6} />
                 <div className="f1">

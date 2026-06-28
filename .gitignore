@@ -26,3 +26,8 @@ yarn-error.log*
 
 # vercel
 .vercel
+# Local AI runtime state
+.atl/
+
+# TypeScript incremental build info
+tsconfig.tsbuildinfo

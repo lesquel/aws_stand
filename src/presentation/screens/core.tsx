@@ -5,6 +5,7 @@
    ============================================================ */
 
 import { useState, useEffect, useRef } from 'react';
+import { QRCodeSVG } from 'qrcode.react';
 import { T } from '../../domain/i18n';
 import { PIECES, PIECE_ORDER } from '../../domain/catalog';
 import { standDone, standProgress } from '../../domain/progress';
@@ -17,26 +18,50 @@ import { useGame } from '../state/game-provider';
 import type { Lang, Nav, Progress, Player, Actions, Localized, PieceId } from '../../domain/types';
 
 interface QrModalProps { lang: Lang; player: Player; onClose: () => void; }
-/* shared: player QR modal */
+/* shared: player QR modal — renders the participant's unique qr_token as a
+   scannable QR (CA-02 / RN-01). The QR encodes the RAW token: the staff scanner
+   reads exactly this string and feeds it to approve_completion. The token text
+   is shown below so staff can type it manually if the camera is unavailable.
+   Offline (localStorage fallback, no Supabase session) there is no token, so we
+   show a sign-in note instead of a non-scannable placeholder. */
 export function QrModal({ lang, player, onClose }: QrModalProps) {
   const tx = (o: Localized) => o[lang];
+  const token = player.qrToken;
   return (
     <Modal onClose={onClose}>
       <Card corners raise style={{ background: 'var(--bg-2)', textAlign: 'center', padding: 24 }}>
         <div className="eyebrow">{tx(T('Tu código', 'Your code'))}</div>
         <h2 className="h2 mt6">{tx(T('Muéstralo al staff', 'Show it to staff'))}</h2>
-        <div style={{ display: 'grid', placeItems: 'center', marginTop: 16 }}>
-          <div style={{ background: '#fff', padding: 12, border: '3px solid var(--orange)' }}>
-            <PixelSprite layers={['qr']} scale={9} />
-          </div>
-        </div>
-        <div className="pixel mt14" style={{ fontSize: 12, color: 'var(--orange)' }}>
-          #{(player.name || 'PLAYER').toUpperCase().replace(/\s/g, '').slice(0, 6)}-2026
-        </div>
-        <p className="t sm" style={{ marginTop: 8 }}>
-          {tx(T('El staff del stand ingresa el código en tu teléfono para validar.',
-                'Stand staff enters their code on your phone to validate.'))}
-        </p>
+
+        {token ? (
+          <>
+            <div style={{ display: 'grid', placeItems: 'center', marginTop: 16 }}>
+              <div style={{ background: '#fff', padding: 12, border: '3px solid var(--orange)' }}>
+                <QRCodeSVG value={token} size={184} level="M" bgColor="#ffffff" fgColor="#0d1322" />
+              </div>
+            </div>
+            <div
+              className="t sm"
+              style={{
+                marginTop: 14, fontFamily: 'var(--fontMono, monospace)', fontSize: 11,
+                color: 'var(--orange)', wordBreak: 'break-all', userSelect: 'all',
+                background: 'var(--panel)', border: '2px solid var(--line)', padding: '8px 10px',
+              }}
+            >
+              {token}
+            </div>
+            <p className="t sm" style={{ marginTop: 8 }}>
+              {tx(T('El staff escanea tu QR para validar. Si no hay cámara, puede ingresar el código.',
+                    'Staff scans your QR to validate. If there is no camera, they can enter the code.'))}
+            </p>
+          </>
+        ) : (
+          <p className="t sm" style={{ marginTop: 18 }}>
+            {tx(T('Tu código QR estará disponible al iniciar sesión.',
+                  'Your QR code will be available once you sign in.'))}
+          </p>
+        )}
+
         <Btn block className="mt20" variant="ghost" onClick={onClose}>{tx(T('Cerrar', 'Close'))}</Btn>
       </Card>
     </Modal>

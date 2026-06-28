@@ -17,19 +17,24 @@ import { T } from '@/domain/i18n';
  * the is_admin() RLS policies. This page never reads privileged data.
  */
 export default function AdminPage() {
-  const { lang, player } = useGame();
+  const { lang, player, authLoading } = useGame();
   const router = useRouter();
   const isAdmin = player?.role === 'admin';
 
   useEffect(() => {
+    if (authLoading) return; // wait for auth to settle before deciding
     if (!player) {
       router.replace('/login');
-    } else if (player.role !== 'admin') {
+      return;
+    }
+    if (player.role !== 'admin') {
       router.replace('/home');
     }
-  }, [player, router]);
+  }, [player, authLoading, router]);
 
-  if (!isAdmin) return null;
+  // Render nothing while auth is loading or for any non-admin (prevents a
+  // flash of the admin placeholder before the redirect runs).
+  if (authLoading || !isAdmin) return null;
 
   const tx = (o: { es: string; en: string }) => o[lang];
 

@@ -78,6 +78,7 @@ interface GameContextValue {
   becomeStaff: (standId: string, accessCode: string) => Promise<{ ok: boolean; error?: string }>;
   changeStand: (standId: string) => Promise<{ ok: boolean; error?: string }>;
   authError: string | null;
+  authLoading: boolean;
   confirmPending: boolean;
 }
 
@@ -587,7 +588,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       player, progress, actions, nav, selectedEventId,
       stands, prizes, catalogLoading, standById, prizeById,
       signUp, signIn, signOut, becomeStaff, changeStand,
-      authError, confirmPending,
+      authError, authLoading, confirmPending,
     }}>
       {children}
     </GameContext.Provider>

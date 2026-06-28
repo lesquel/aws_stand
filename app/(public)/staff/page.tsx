@@ -6,15 +6,16 @@ import { useGame } from '@/presentation/state/game-provider';
 import { StaffScreen } from '@/presentation/screens/staff';
 
 export default function StaffPage() {
-  const { lang, nav, player, becomeStaff, changeStand } = useGame();
+  const { lang, nav, player, becomeStaff, changeStand, authLoading } = useGame();
   const router = useRouter();
 
-  // Not logged in → redirect to login
+  // Not logged in → redirect to login (wait for auth to settle first)
   useEffect(() => {
+    if (authLoading) return; // wait for auth before deciding
     if (!player) router.replace('/login');
-  }, [player, router]);
+  }, [player, authLoading, router]);
 
-  if (!player) return null;
+  if (authLoading || !player) return null;
 
   return <StaffScreen lang={lang} nav={nav} player={player} becomeStaff={becomeStaff} changeStand={changeStand} />;
 }

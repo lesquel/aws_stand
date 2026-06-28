@@ -11,6 +11,7 @@ const tabs = [
   { id: 'avatar', ic: 'buddy', label: T('Avatar', 'Avatar') },
   { id: 'badges', ic: 'ic_medal', label: T('Insignias', 'Badges') },
   { id: 'prizes', ic: 'ticket', label: T('Premios', 'Prizes') },
+  { id: 'leaderboard', ic: 'ic_trophy', label: T('Ranking', 'Ranking') },
 ];
 
 export default function GameLayout({ children }: { children: React.ReactNode }) {

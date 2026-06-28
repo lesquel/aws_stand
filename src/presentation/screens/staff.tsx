@@ -282,7 +282,11 @@ function StaffConsole({ lang, nav, player, onChangeStand }: StaffConsoleProps) {
           ))}
         </div>
 
-        <Btn block variant="ghost" size="sm" className="mt20" onClick={onChangeStand}>
+        <Btn block size="sm" className="mt20" onClick={() => nav('leaderboard')}>
+          {tx(T('Ver ranking', 'View leaderboard'))}
+        </Btn>
+
+        <Btn block variant="ghost" size="sm" className="mt14" onClick={onChangeStand}>
           {tx(T('Cambiar stand', 'Change stand'))}
         </Btn>
       </div>

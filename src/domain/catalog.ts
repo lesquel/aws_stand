@@ -101,10 +101,3 @@ export const PRIZES: Prize[] = [
 ];
 
 export const prizeById = (id: string): Prize | undefined => PRIZES.find(p => p.id === id);
-
-/* Reduce remaining stock for a prize. Stock is shared event state (not part of a
-   single player's progress), so it is mutated here at the catalog boundary. */
-export function decrementStock(prizeId: string): void {
-  const pz = prizeById(prizeId);
-  if (pz && pz.stock > 0) pz.stock -= 1;
-}

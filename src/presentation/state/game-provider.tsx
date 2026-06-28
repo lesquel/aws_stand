@@ -10,13 +10,12 @@ import React, { createContext, useContext, useState, useEffect, useRef } from 'r
 import { useRouter } from 'next/navigation';
 import type { Session } from '@supabase/supabase-js';
 import { T } from '../../domain/i18n';
-import { PIECES, STANDS, PRIZES, decrementStock } from '../../domain/catalog';
+import { PIECES, STANDS, PRIZES } from '../../domain/catalog';
 import { loadCatalog } from '../../infrastructure/supabase-catalog-repository';
 import { emptyProgress, deriveVisitedStands } from '../../domain/progress';
 import { badgeById } from '../../domain/badges';
 import { completeActivity } from '../../application/complete-activity';
 import { approveActivity } from '../../application/approve-activity';
-import { claimPrize } from '../../application/claim-prize';
 import { load, save, clear } from '../../infrastructure/local-storage-game-repository';
 import { getSupabase, supabaseConfigured } from '../../infrastructure/supabase-client';
 import { fetchProfile } from '../../infrastructure/supabase-game-repository';
@@ -26,7 +25,8 @@ import {
   type StaffAssignment,
   type ApproveResult,
 } from '../../infrastructure/supabase-staff-repository';
-import { joinEvent, saveParticipation } from '../../infrastructure/supabase-participation-repository';
+import { joinEvent, saveParticipation, fetchParticipation } from '../../infrastructure/supabase-participation-repository';
+import { claimPrize as claimPrizeRpc, PrizeClaimError, type ClaimFailureReason } from '../../infrastructure/supabase-prize-repository';
 import { fetchActiveEvents, type ActiveEvent } from '../../infrastructure/supabase-events-repository';
 import { showToast } from '../feedback/toast';
 import { fireConfetti } from '../feedback/confetti';
@@ -511,15 +511,62 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     return { ok: true, ...cr };
   }
 
+  // Claiming is server-authoritative (SP3): the claim_prize RPC validates
+  // affordability / stock / duplication and atomically deducts tickets, records
+  // the claim, and decrements stock. The client no longer mutates participation
+  // for a claim — it refreshes participation + catalog from the DB so the UI
+  // reflects the authoritative result. Fire-and-forget from the button handler.
   function claim(prizeId: string): void {
+    void claimFlow(prizeId);
+  }
+
+  function claimErrorTitle(reason: ClaimFailureReason): string {
+    switch (reason) {
+      case 'insufficient':
+        return tx(T('No te alcanzan los tickets', 'Not enough tickets'));
+      case 'out-of-stock':
+        return tx(T('Premio sin stock', 'Prize out of stock'));
+      case 'already-claimed':
+        return tx(T('Ya canjeaste este premio', 'Prize already claimed'));
+      default:
+        return tx(T('No se pudo canjear el premio', 'Could not claim the prize'));
+    }
+  }
+
+  async function claimFlow(prizeId: string): Promise<void> {
+    if (!supabase) return;
+    const eventId = selectedEventIdRef.current;
+    if (!eventId) return;
     const pz = prizeById(prizeId);
-    const { progress: np, ok } = claimPrize(progress, pz);
-    if (!ok || !pz) return;
-    decrementStock(prizeId);
-    setProgress(np);
-    fireConfetti({ count: 90, colors: ['#ffd23f', '#ff9900', '#fff'] });
-    showToast({ title: pz.raffle ? tx(T('¡Inscrito al sorteo!', 'Entered raffle!')) : tx(T('¡Premio canjeado!', 'Prize claimed!')), sub: tx(pz.name), sprite: pz.sprite, dur: 3000 });
-    playPrize();
+
+    try {
+      await claimPrizeRpc(supabase, eventId, prizeId);
+
+      // Reload the authoritative participation (tickets / claimed) and catalog
+      // (decremented stock) from the DB; derive visitedStands as elsewhere.
+      const participation = await fetchParticipation(supabase, eventId);
+      if (participation) {
+        setProgress({
+          ...participation.progress,
+          visitedStands: deriveVisitedStands(participation.progress.doneActivities, standsRef.current),
+        });
+      }
+      try {
+        const data = await loadCatalog(supabase);
+        setCatalog(data);
+      } catch {
+        // Keep the current catalog on a refresh failure; the claim still stuck.
+      }
+
+      if (pz) {
+        fireConfetti({ count: 90, colors: ['#ffd23f', '#ff9900', '#fff'] });
+        showToast({ title: pz.raffle ? tx(T('¡Inscrito al sorteo!', 'Entered raffle!')) : tx(T('¡Premio canjeado!', 'Prize claimed!')), sub: tx(pz.name), sprite: pz.sprite, dur: 3000 });
+        playPrize();
+      }
+    } catch (err) {
+      const reason = err instanceof PrizeClaimError ? err.reason : 'unknown';
+      showToast({ title: claimErrorTitle(reason), sprite: 'flag' });
+    }
   }
 
   const actions: Actions = { complete, approve, claim };

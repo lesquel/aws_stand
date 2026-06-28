@@ -66,6 +66,11 @@ describe('SP3 correct_points — point corrections with audit history (RN-09, CA
   /**
    * Seed (or reset) the shared player's participation in the shared event with a
    * known starting ticket balance, and return the participation id.
+   *
+   * The participation is upserted on (player_id, event_id), so every test reuses
+   * the SAME row. To keep each test's correction count independent, this also
+   * wipes the participation's audit ledger — otherwise point_corrections rows
+   * from earlier cases would leak into a later "expected 0/1" assertion.
    */
   async function seedParticipation(tickets: number): Promise<string> {
     const { data, error } = await service
@@ -77,7 +82,14 @@ describe('SP3 correct_points — point corrections with audit history (RN-09, CA
       .select('id')
       .single();
     if (error || !data) throw new Error(`participation seed failed: ${error?.message}`);
-    return data.id as string;
+    const participationId = data.id as string;
+    // Reset the append-only audit ledger so correction counts start at zero per test.
+    const { error: wipeErr } = await service
+      .from('point_corrections')
+      .delete()
+      .eq('participation_id', participationId);
+    if (wipeErr) throw new Error(`audit ledger reset failed: ${wipeErr.message}`);
+    return participationId;
   }
 
   async function ticketsOfParticipation(participationId: string): Promise<number> {

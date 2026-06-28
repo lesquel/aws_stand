@@ -16,6 +16,7 @@ import { useGame } from '../../state/game-provider';
 import { T } from '../../../domain/i18n';
 import type { Lang, Localized } from '../../../domain/types';
 import { EventsSection } from './events-section';
+import { StandsSection } from './stands-section';
 
 type SectionId = 'events' | 'stands' | 'prizes' | 'staff';
 
@@ -27,7 +28,7 @@ interface NavItem {
 
 const NAV: readonly NavItem[] = [
   { id: 'events', label: T('Eventos', 'Events'), enabled: true },
-  { id: 'stands', label: T('Stands', 'Stands'), enabled: false },
+  { id: 'stands', label: T('Stands', 'Stands'), enabled: true },
   { id: 'prizes', label: T('Premios', 'Prizes'), enabled: false },
   { id: 'staff', label: T('Staff', 'Staff'), enabled: false },
 ];
@@ -113,6 +114,7 @@ export function AdminConsole() {
         </nav>
 
         {section === 'events' && <EventsSection lang={lang as Lang} />}
+        {section === 'stands' && <StandsSection lang={lang as Lang} />}
       </div>
     </div>
   );

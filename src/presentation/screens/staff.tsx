@@ -19,6 +19,7 @@ import { T } from '../../domain/i18n';
 import { Btn, Card } from '../components/ui-kit';
 import { PixelSprite } from '../components/sprites';
 import { QrScanner, type QrCameraError } from '../components/qr-scanner';
+import { WinnerValidationCard } from '../components/winner-validation';
 import { showToast } from '../feedback/toast';
 import type { Lang, Nav, Localized } from '../../domain/types';
 import type { StaffAssignment, ApproveResult } from '../../infrastructure/supabase-staff-repository';
@@ -36,6 +37,7 @@ export function StaffScreen({ lang, nav, getStaffAssignments, approveCompletion 
   const [assignments, setAssignments] = useState<StaffAssignment[] | null>(null);
   const [loadError, setLoadError] = useState(false);
   const [active, setActive] = useState<StaffAssignment | null>(null);
+  const [winnerFor, setWinnerFor] = useState<StaffAssignment | null>(null);
 
   // Keep the latest loader without re-running the mount effect. getStaffAssignments
   // is a plain (non-memoized) function from GameProvider, so it gets a new identity
@@ -69,6 +71,18 @@ export function StaffScreen({ lang, nav, getStaffAssignments, approveCompletion 
     );
   }
 
+  // Winner-validation mode (event close) for the picked stand's event
+  if (winnerFor) {
+    return (
+      <WinnerMode
+        lang={lang}
+        assignment={winnerFor}
+        onBack={() => setWinnerFor(null)}
+        onExit={() => nav('landing')}
+      />
+    );
+  }
+
   // Scan mode for the picked stand
   if (active) {
     return (
@@ -78,6 +92,7 @@ export function StaffScreen({ lang, nav, getStaffAssignments, approveCompletion 
         approveCompletion={approveCompletion}
         onBack={() => setActive(null)}
         onExit={() => nav('landing')}
+        onWinner={() => { setWinnerFor(active); setActive(null); }}
       />
     );
   }
@@ -158,11 +173,12 @@ interface ScanModeProps {
   approveCompletion: (qrToken: string, activityId: string, position?: number) => Promise<ApproveResult>;
   onBack: () => void;
   onExit: () => void;
+  onWinner: () => void;
 }
 
 const DEDUP_WINDOW_MS = 2500;
 
-function ScanMode({ lang, assignment, approveCompletion, onBack, onExit }: ScanModeProps) {
+function ScanMode({ lang, assignment, approveCompletion, onBack, onExit, onWinner }: ScanModeProps) {
   const tx = (o: Localized) => o[lang];
   const activity = assignment.activity!; // guarded by the picker (disabled when null)
   const isPosition = activity.scoreType === 'position';
@@ -247,6 +263,11 @@ function ScanMode({ lang, assignment, approveCompletion, onBack, onExit }: ScanM
               : `+${activity.pointsFixed} ${tx(T('puntos', 'points'))}`}
           </div>
         </Card>
+
+        {/* event-close winner validation (CA-08) — scoped to this stand's event */}
+        <Btn block variant="ghost" size="sm" className="mt14" onClick={onWinner}>
+          🏆 {tx(T('Validar ganador', 'Validate winner'))}
+        </Btn>
 
         {/* position selector (position-scored activities only) */}
         {isPosition && (
@@ -349,6 +370,43 @@ function ScanMode({ lang, assignment, approveCompletion, onBack, onExit }: ScanM
             </Btn>
           </div>
         )}
+      </div>
+    </div>
+  );
+}
+
+/* ── Winner-validation mode (event close) ──────────────────────────────────── */
+
+interface WinnerModeProps {
+  lang: Lang;
+  assignment: StaffAssignment;
+  onBack: () => void;
+  onExit: () => void;
+}
+
+function WinnerMode({ lang, assignment, onBack, onExit }: WinnerModeProps) {
+  const tx = (o: Localized) => o[lang];
+  const accent = assignment.standAccent ?? 'var(--cyan)';
+
+  return (
+    <div className="screen scr-anim">
+      <div className="wrap narrow" style={{ paddingTop: 30 }}>
+        <div className="spread">
+          <button className="kbtn" onClick={onBack}>← {tx(T('Estación', 'Station'))}</button>
+          <button className="kbtn" onClick={onExit}>✕</button>
+        </div>
+
+        <Card corners raise className="mt14" style={{ borderColor: accent, background: 'var(--bg-2)', padding: 16 }}>
+          <div className="pixel" style={{ fontSize: 8, color: accent }}>{assignment.eventName.toUpperCase()}</div>
+          <div className="h2" style={{ marginTop: 6 }}>{tx(T('Validar ganador', 'Validate winner'))}</div>
+          <div className="t sm" style={{ color: 'var(--ink-2)', marginTop: 4 }}>
+            {tx(T('Escaneá el QR para ver puesto y badges.', 'Scan the QR to see rank and badges.'))}
+          </div>
+        </Card>
+
+        <div className="mt20">
+          <WinnerValidationCard lang={lang} eventId={assignment.eventId} />
+        </div>
       </div>
     </div>
   );

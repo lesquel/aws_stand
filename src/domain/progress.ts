@@ -6,13 +6,31 @@
    ============================================================ */
 
 import { standById } from './catalog';
-import type { Progress } from './types';
+import type { Progress, Stand } from './types';
 
 /* the blank slate for a brand-new player */
 export const emptyProgress = (): Progress => ({
   doneActivities: [], pieces: [], badges: [], claimed: [],
   visitedStands: [], tickets: 0, lastPiece: null,
 });
+
+/* Reconstruct the visited-stands set from completed activities against a
+   catalog. `visitedStands` is not persisted in `participations` (no column);
+   it is derived on load so the "visit N stands" badge keeps its progress.
+   RN-03 guarantees one activity per stand, so each done activity maps to at
+   most one stand. */
+export function deriveVisitedStands(doneActivities: string[], stands: Stand[]): string[] {
+  const activityToStand = new Map<string, string>();
+  for (const stand of stands) {
+    for (const activity of stand.activities) activityToStand.set(activity.id, stand.id);
+  }
+  const visited = new Set<string>();
+  for (const activityId of doneActivities) {
+    const standId = activityToStand.get(activityId);
+    if (standId) visited.add(standId);
+  }
+  return [...visited];
+}
 
 /* a stand is "done" when every one of its activities is completed */
 export function standDone(p: Progress, standId: string): boolean {

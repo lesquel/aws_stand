@@ -29,7 +29,7 @@ import { useTweaks } from '../components/tweaks-panel';
 import type { Lang, Progress, Player, CompleteResult, Localized, Actions, Nav, Role, Stand, Prize } from '../../domain/types';
 
 // Screens that require a logged-in player
-const IN_APP = ['home', 'stand', 'avatar', 'badges', 'prizes'];
+const IN_APP = ['home', 'stand', 'avatar', 'badges', 'prizes', 'leaderboard'];
 
 const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
   "lang": "es",
@@ -49,6 +49,7 @@ const SCREEN_PATHS: Record<string, string> = {
   avatar: '/avatar',
   badges: '/badges',
   prizes: '/prizes',
+  leaderboard: '/leaderboard',
   staff: '/staff',
   dashboard: '/dashboard',
 };

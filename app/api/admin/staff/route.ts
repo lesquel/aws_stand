@@ -43,8 +43,11 @@ function errorResponse(err: unknown): NextResponse {
   if (err instanceof StaffValidationError) {
     return NextResponse.json({ error: err.message }, { status: 400 });
   }
-  const message = err instanceof Error ? err.message : 'Error inesperado.';
-  return NextResponse.json({ error: message }, { status: 500 });
+  // Unexpected error: log the real cause server-side, but never leak it to the
+  // client. Raw `err.message` can expose PostgREST/Postgres schema details, so
+  // the response stays a generic message.
+  console.error('[staff-route]', err);
+  return NextResponse.json({ error: 'Error interno del servidor.' }, { status: 500 });
 }
 
 /** Resolve the caller's user id from the bearer token, or null when unauthenticated. */

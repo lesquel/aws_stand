@@ -13,6 +13,8 @@
    request BEFORE performing any privileged operation.
    ============================================================ */
 
+import 'server-only';
+
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 
 let _service: SupabaseClient | null = null;

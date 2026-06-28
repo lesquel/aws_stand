@@ -23,6 +23,8 @@
    `StaffAuthorizationError` and nothing is created or changed.
    ============================================================ */
 
+import 'server-only';
+
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { getServiceClient } from './supabase-admin-server';
 
@@ -208,10 +210,15 @@ export async function createStaffAccount(
 
   try {
     // Promote to staff (service-role bypasses the client column lock on `role`).
+    // `.select(...).single()` forces a row to come back: a zero-row update
+    // (e.g. the signup trigger never seeded the profile) then throws a clear
+    // error instead of silently continuing to the assignment insert.
     const { error: roleErr } = await service
       .from('profiles')
       .update({ role: 'staff' })
-      .eq('id', staffId);
+      .eq('id', staffId)
+      .select('id')
+      .single();
     if (roleErr) throw new Error(roleErr.message);
 
     // Assign to the event + stand.
@@ -256,6 +263,11 @@ export async function unassignStaff(callerId: string, assignmentId: string): Pro
   const service = getServiceClient();
   await assertAdmin(service, callerId);
   if (!assignmentId) throw new StaffValidationError('Falta la asignación a quitar.');
+  // The delete is keyed only by assignment id, NOT scoped to an event/org. This
+  // is intentional for the current single-org admin model, where any admin may
+  // manage every event. If the product ever grows to multiple independent
+  // admins owning separate events, this becomes an IDOR (one admin could
+  // unassign another org's staff by id) and must be event-scoped here.
   const { error } = await service.from('staff_assignments').delete().eq('id', assignmentId);
   if (error) throw new Error(error.message);
 }

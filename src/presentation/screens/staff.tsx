@@ -37,18 +37,26 @@ export function StaffScreen({ lang, nav, getStaffAssignments, approveCompletion 
   const [loadError, setLoadError] = useState(false);
   const [active, setActive] = useState<StaffAssignment | null>(null);
 
+  // Keep the latest loader without re-running the mount effect. getStaffAssignments
+  // is a plain (non-memoized) function from GameProvider, so it gets a new identity
+  // on every provider render; depending on it would re-fire the load on unrelated
+  // state changes (write-behind save, catalog load, lang toggle) and a transient
+  // background error would flip a valid staff user into the "could not load" view.
+  const getAssignmentsRef = useRef(getStaffAssignments);
+  getAssignmentsRef.current = getStaffAssignments;
+
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
-        const list = await getStaffAssignments();
+        const list = await getAssignmentsRef.current();
         if (!cancelled) setAssignments(list);
       } catch {
         if (!cancelled) { setAssignments([]); setLoadError(true); }
       }
     })();
     return () => { cancelled = true; };
-  }, [getStaffAssignments]);
+  }, []); // load once on mount
 
   // Loading
   if (assignments === null) {

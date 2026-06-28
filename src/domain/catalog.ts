@@ -28,7 +28,7 @@ export const STANDS: Stand[] = [
     tag: T('AWS · Infraestructura', 'AWS · Infrastructure'),
     blurb: T('Lanza tu carga a la nube y aprende a escalar sin servidores.',
              'Toss your workload to the cloud and learn to scale serverless.'),
-    piece: 'cap', map: { x: 16, y: 70 }, staffCode: '2486',
+    piece: 'cap', map: { x: 16, y: 70 },
     activities: [
       { id: 'c1', name: T('Lanza el aro a la nube', 'Ring toss to the cloud'), tickets: 1 },
       { id: 'c2', name: T('Habla con un Arquitecto', 'Talk to an Architect'), tickets: 1 },
@@ -41,7 +41,7 @@ export const STANDS: Stand[] = [
     tag: T('Inteligencia Artificial', 'Artificial Intelligence'),
     blurb: T('Entrena un modelo en vivo y reta a la máquina a adivinar tu dibujo.',
              'Train a model live and dare the machine to guess your sketch.'),
-    piece: 'visor', map: { x: 38, y: 34 }, staffCode: '7391',
+    piece: 'visor', map: { x: 38, y: 34 },
     activities: [
       { id: 'i1', name: T('Adivina con la IA', 'Beat the AI guesser'), tickets: 1 },
       { id: 'i2', name: T('Prompt challenge', 'Prompt challenge'), tickets: 2, special: true },
@@ -54,7 +54,7 @@ export const STANDS: Stand[] = [
     tag: T('Seguridad en la nube', 'Cloud Security'),
     blurb: T('Defiende el castillo: detecta la brecha antes de que caiga el muro.',
              'Defend the keep: spot the breach before the wall falls.'),
-    piece: 'shield', map: { x: 62, y: 64 }, staffCode: '5028',
+    piece: 'shield', map: { x: 62, y: 64 },
     activities: [
       { id: 's1', name: T('Encuentra la brecha', 'Find the breach'), tickets: 1 },
       { id: 's2', name: T('Arma tu contraseña', 'Build a strong password'), tickets: 1 },
@@ -67,7 +67,7 @@ export const STANDS: Stand[] = [
     tag: T('Comunidad & Networking', 'Community & Networking'),
     blurb: T('Conoce builders, intercambia stickers y suma aliados a tu party.',
              'Meet builders, swap stickers and add allies to your party.'),
-    piece: 'backpack', map: { x: 80, y: 30 }, staffCode: '9143',
+    piece: 'backpack', map: { x: 80, y: 30 },
     activities: [
       { id: 'm1', name: T('Conoce a 3 builders', 'Meet 3 builders'), tickets: 1 },
       { id: 'm2', name: T('Foto con la comunidad', 'Community group photo'), tickets: 1 },
@@ -80,7 +80,7 @@ export const STANDS: Stand[] = [
     tag: T('Reto final', 'Boss challenge'),
     blurb: T('La zona jefe. Completa el circuito de builders y reclama tus botas.',
              'The boss zone. Clear the builder gauntlet and claim your boots.'),
-    piece: 'boots', map: { x: 50, y: 88 }, staffCode: '6675',
+    piece: 'boots', map: { x: 50, y: 88 },
     activities: [
       { id: 'b1', name: T('Mini-hack de 5 min', '5-min mini hack'), tickets: 2 },
       { id: 'b2', name: T('Arma una arquitectura', 'Assemble an architecture'), tickets: 2 },

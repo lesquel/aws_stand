@@ -60,10 +60,9 @@ interface PrizeRow {
 // TODO i18n: English copy mirrors Spanish until per-locale columns exist.
 const localized = (value: string | null): Localized => ({ es: value ?? '', en: value ?? '' });
 
-// Sprites (prizes) and the legacy staff code are presentation/legacy assets the
-// DB intentionally does not store; bridge them from the static catalog by slug.
+// Sprites (prizes) are presentation assets the DB intentionally does not store;
+// bridge them from the static catalog by slug.
 const STATIC_PRIZE_SPRITE = new Map(PRIZES.map((p) => [p.id, p.sprite]));
-const STATIC_STAND_STAFF_CODE = new Map(STANDS.map((s) => [s.id, s.staffCode]));
 
 function firstActivity(rows: ActivityRow | ActivityRow[] | null): ActivityRow | null {
   if (!rows) return null;
@@ -92,9 +91,6 @@ function mapStand(row: StandRow): Stand {
     piece: (row.piece_id ?? '') as PieceId,
     map: { x: Number(row.map_x), y: Number(row.map_y) },
     activities: act ? [mapActivity(act)] : [],
-    // staffCode is a legacy field with no DB column (staff identity is SP3);
-    // bridge from the static catalog so the staff console keeps working.
-    staffCode: STATIC_STAND_STAFF_CODE.get(row.slug) ?? '',
   };
 }
 

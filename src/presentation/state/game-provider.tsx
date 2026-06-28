@@ -10,12 +10,9 @@ import React, { createContext, useContext, useState, useEffect, useRef } from 'r
 import { useRouter } from 'next/navigation';
 import type { Session } from '@supabase/supabase-js';
 import { T } from '../../domain/i18n';
-import { PIECES, STANDS, PRIZES } from '../../domain/catalog';
+import { STANDS, PRIZES } from '../../domain/catalog';
 import { loadCatalog } from '../../infrastructure/supabase-catalog-repository';
 import { emptyProgress, deriveVisitedStands } from '../../domain/progress';
-import { badgeById } from '../../domain/badges';
-import { completeActivity } from '../../application/complete-activity';
-import { approveActivity } from '../../application/approve-activity';
 import { load, save, clear } from '../../infrastructure/local-storage-game-repository';
 import { getSupabase, supabaseConfigured } from '../../infrastructure/supabase-client';
 import { fetchProfile } from '../../infrastructure/supabase-game-repository';
@@ -25,14 +22,14 @@ import {
   type StaffAssignment,
   type ApproveResult,
 } from '../../infrastructure/supabase-staff-repository';
-import { joinEvent, saveParticipation, fetchParticipation } from '../../infrastructure/supabase-participation-repository';
+import { joinEvent, fetchParticipation } from '../../infrastructure/supabase-participation-repository';
 import { claimPrize as claimPrizeRpc, PrizeClaimError, type ClaimFailureReason } from '../../infrastructure/supabase-prize-repository';
 import { fetchActiveEvents, type ActiveEvent } from '../../infrastructure/supabase-events-repository';
 import { showToast } from '../feedback/toast';
 import { fireConfetti } from '../feedback/confetti';
-import { setSoundEnabled, primeAudio, playClick, playSuccess, playUnlock, playPrize } from '../feedback/sound';
+import { setSoundEnabled, primeAudio, playClick, playPrize } from '../feedback/sound';
 import { useTweaks } from '../components/tweaks-panel';
-import type { Lang, Progress, Player, CompleteResult, Localized, Actions, Nav, Role, Stand, Prize } from '../../domain/types';
+import type { Lang, Progress, Player, Localized, Actions, Nav, Stand, Prize } from '../../domain/types';
 
 // Screens that require a logged-in player
 const IN_APP = ['home', 'stand', 'avatar', 'badges', 'prizes', 'leaderboard'];
@@ -136,14 +133,8 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
   const standById = (id: string): Stand | undefined => stands.find(s => s.id === id);
   const prizeById = (id: string): Prize | undefined => prizes.find(p => p.id === id);
 
-  // Debounce timer for write-behind progress saves
-  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const progressRef = useRef(progress);
-  progressRef.current = progress;
-  // Keep a stable ref to session for beforeunload
-  const sessionRef = useRef<Session | null>(session);
-  sessionRef.current = session;
-  // Stable refs for the async save closures (debounce / unload / sign-out).
+  // Stable ref to the selected event so async flows (claim refresh) read the
+  // freshest event without re-creating their closures.
   const selectedEventIdRef = useRef<string | null>(selectedEventId);
   selectedEventIdRef.current = selectedEventId;
   // Catalog ref so async join/load can derive visitedStands against the freshest
@@ -217,49 +208,19 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     }
   }
 
-  // Join an event (idempotent RPC) and load its participation into state. Also
-  // runs the one-time legacy localStorage → participation migration: if the
-  // fresh participation is empty and a legacy save exists, upload it once and
-  // clear localStorage only after the upload succeeds.
+  // Join an event (idempotent RPC) and load its participation into state.
+  // Participations are server-authoritative: the client only READS them (here on
+  // join and after a claim). There is no client write path anymore — gameplay
+  // rewards are awarded exclusively by the staff-scan approve_completion RPC, so
+  // the old localStorage → participation upload migration is gone.
   async function joinAndLoad(eventId: string) {
     if (!supabase) return;
-    const userId = sessionRef.current?.user.id;
     const participation = await joinEvent(supabase, eventId);
-    let resolved = participation.progress;
-
-    const isEmpty =
-      resolved.doneActivities.length === 0 &&
-      resolved.tickets === 0 &&
-      resolved.pieces.length === 0;
-    if (isEmpty) {
-      const local = load();
-      const hasLocalProgress =
-        local?.progress &&
-        (local.progress.doneActivities.length > 0 ||
-          local.progress.tickets > 0 ||
-          local.progress.pieces.length > 0);
-      if (hasLocalProgress && local?.progress && userId) {
-        try {
-          await saveParticipation(supabase, userId, eventId, local.progress);
-          clear(); // only after a successful upload
-          resolved = local.progress;
-          setTimeout(() => showToast({
-            title: tx(T('Progreso local recuperado', 'Local progress restored')),
-            sprite: 'flag',
-          }), 400);
-        } catch {
-          // Upload failed — keep local progress in memory so the debounced
-          // writer retries; do NOT clear localStorage.
-          console.warn('[joinAndLoad] Migration save failed; keeping local progress in memory');
-          resolved = local.progress;
-        }
-      }
-    }
 
     // visitedStands is derived (not stored); rebuild it from the current catalog.
     const withVisited: Progress = {
-      ...resolved,
-      visitedStands: deriveVisitedStands(resolved.doneActivities, standsRef.current),
+      ...participation.progress,
+      visitedStands: deriveVisitedStands(participation.progress.doneActivities, standsRef.current),
     };
     setSelectedEventId(eventId);
     setProgress(withVisited);
@@ -280,39 +241,6 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       });
     }
   }
-
-  // Write-behind: debounced participation save to Supabase when a session and an
-  // event are selected. Captures the user id + event id at schedule time and
-  // validates both at fire time so a sign-out or event switch during the 800ms
-  // window cannot write under the wrong user/event.
-  useEffect(() => {
-    if (!supabase || !session || !selectedEventId) return;
-    const capturedUserId = session.user.id;
-    const capturedEventId = selectedEventId;
-    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-    saveTimerRef.current = setTimeout(() => {
-      const current = sessionRef.current;
-      if (!current || current.user.id !== capturedUserId) return;
-      if (selectedEventIdRef.current !== capturedEventId) return;
-      saveParticipation(supabase!, capturedUserId, capturedEventId, progressRef.current).catch((err) => {
-        console.warn('[saveParticipation] write-behind failed:', err);
-      });
-    }, 800);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [progress, session, selectedEventId]);
-
-  // Flush on page unload
-  useEffect(() => {
-    if (!supabase) return;
-    function flush() {
-      const s = sessionRef.current;
-      const eventId = selectedEventIdRef.current;
-      if (s && eventId) saveParticipation(supabase!, s.user.id, eventId, progressRef.current).catch(() => { /* best-effort */ });
-    }
-    window.addEventListener('beforeunload', flush);
-    return () => window.removeEventListener('beforeunload', flush);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   // Re-derive visitedStands whenever the catalog changes (e.g. static → DB
   // stands resolve after participation already loaded). Idempotent; the no-op
@@ -436,15 +364,8 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
 
   async function signOut() {
     if (!supabase) return;
-    // Clear pending debounce and do a best-effort final flush before signing out
-    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-    try {
-      const s = sessionRef.current;
-      const eventId = selectedEventIdRef.current;
-      if (s && eventId) await saveParticipation(supabase, s.user.id, eventId, progressRef.current);
-    } catch {
-      // best-effort — ignore
-    }
+    // Participations are server-authoritative (no client write-behind to flush);
+    // just clear local state and end the session.
     setConfirmPending(false);
     setAuthError(null);
     clear();
@@ -475,41 +396,6 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
   }
 
   // ── Actions ────────────────────────────────────────────────────────────────
-
-  function applyRewardEffects(
-    np: Progress,
-    standId: string,
-    actId: string,
-    rewards: { tickets: number; piece: string | null; badges: string[] }
-  ): CompleteResult {
-    setProgress(np);
-    const stand = standById(standId);
-    const act = stand?.activities.find(a => a.id === actId);
-    if (act) showToast({ title: '+' + rewards.tickets + ' ' + tx(T('TICKETS', 'TICKETS')), sub: tx(act.name), sprite: 'ticket' });
-    if (rewards.piece) showToast({ title: tx(T('¡Pieza nueva!', 'New piece!')), sub: tx(PIECES[rewards.piece as keyof typeof PIECES].name), sprite: PIECES[rewards.piece as keyof typeof PIECES].sprite, dur: 3200 });
-    rewards.badges.forEach(bid => { const b = badgeById(bid); if (b) showToast({ title: tx(T('¡Insignia!', 'Badge!')), sub: tx(b.name), sprite: b.icon, dur: 3200 }); });
-    if (!rewards.piece && !rewards.badges.length) fireConfetti({ count: 40, y: .5 });
-    if (rewards.piece) playUnlock(); else playSuccess();
-    return { tickets: rewards.tickets, piece: rewards.piece as CompleteResult['piece'], badges: rewards.badges };
-  }
-
-  function complete(standId: string, actId: string): CompleteResult {
-    const { progress: np, rewards } = completeActivity(progress, standId, actId);
-    if (!rewards) return { tickets: 0 };
-    return applyRewardEffects(np, standId, actId, rewards);
-  }
-
-  function approve(standId: string, actId: string, code: string): { ok: false } | ({ ok: true } & CompleteResult) {
-    const result = approveActivity(progress, standId, actId, code);
-    if (!result.ok) return { ok: false };
-    const { progress: np, tickets, piece, badges } = result;
-    if (tickets === 0 && !piece && (!badges || !badges.length)) {
-      setProgress(np);
-      return { ok: true, tickets: 0 };
-    }
-    const cr = applyRewardEffects(np, standId, actId, { tickets, piece: piece ?? null, badges: badges ?? [] });
-    return { ok: true, ...cr };
-  }
 
   // Claiming is server-authoritative (SP3): the claim_prize RPC validates
   // affordability / stock / duplication and atomically deducts tickets, records
@@ -569,7 +455,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     }
   }
 
-  const actions: Actions = { complete, approve, claim };
+  const actions: Actions = { claim };
 
   // ── Render gate ───────────────────────────────────────────────────────────
 

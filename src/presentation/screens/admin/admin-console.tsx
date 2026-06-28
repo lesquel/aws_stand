@@ -4,8 +4,8 @@
    Presentation · Admin · Console shell
 
    The real /admin layout (replaces the SP1 placeholder). Header + section nav
-   styled with the existing pixel UI kit. Eventos is live (SP2); Stands, Premios
-   and Staff are visible-but-disabled stubs landing in later SP2 slices.
+   styled with the existing pixel UI kit. Eventos, Stands, Premios and Staff are
+   all live (SP2).
 
    The admin guard (redirect non-admins, gate on authLoading) stays in the route
    page — this component assumes it only renders for a signed-in admin.
@@ -18,6 +18,7 @@ import type { Lang, Localized } from '../../../domain/types';
 import { EventsSection } from './events-section';
 import { StandsSection } from './stands-section';
 import { PrizesSection } from './prizes-section';
+import { StaffSection } from './staff-section';
 
 type SectionId = 'events' | 'stands' | 'prizes' | 'staff';
 
@@ -31,7 +32,7 @@ const NAV: readonly NavItem[] = [
   { id: 'events', label: T('Eventos', 'Events'), enabled: true },
   { id: 'stands', label: T('Stands', 'Stands'), enabled: true },
   { id: 'prizes', label: T('Premios', 'Prizes'), enabled: true },
-  { id: 'staff', label: T('Staff', 'Staff'), enabled: false },
+  { id: 'staff', label: T('Staff', 'Staff'), enabled: true },
 ];
 
 export function AdminConsole() {
@@ -117,6 +118,7 @@ export function AdminConsole() {
         {section === 'events' && <EventsSection lang={lang as Lang} />}
         {section === 'stands' && <StandsSection lang={lang as Lang} />}
         {section === 'prizes' && <PrizesSection lang={lang as Lang} />}
+        {section === 'staff' && <StaffSection lang={lang as Lang} />}
       </div>
     </div>
   );

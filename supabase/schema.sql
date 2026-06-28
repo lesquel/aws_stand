@@ -1,3 +1,4 @@
+-- DEPRECATED — does NOT reflect the live schema. Source of truth: supabase/migrations/ (apply 0001, 0002 in order). Provisioning from this file will break admin/multi-event features.
 -- Cloud Quest · Supabase schema
 -- Apply: Supabase Dashboard → SQL Editor → paste and run
 

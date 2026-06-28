@@ -6,7 +6,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { T } from '../../domain/i18n';
-import { STANDS, standById, PIECES, PIECE_ORDER } from '../../domain/catalog';
+import { PIECES, PIECE_ORDER } from '../../domain/catalog';
 import { standDone, standProgress } from '../../domain/progress';
 import { badgeById } from '../../domain/badges';
 import { Card, Btn, Bar, Modal } from '../components/ui-kit';
@@ -47,17 +47,31 @@ interface MapScreenProps { lang: Lang; nav: Nav; progress: Progress; player: Pla
 /* ---------------- MAP / HOME ---------------- */
 export function MapScreen({ lang, nav, progress, player }: MapScreenProps) {
   const tx = (o: Localized) => o[lang];
-  const { signOut } = useGame();
+  const { signOut, stands, catalogLoading } = useGame();
   const [qr, setQr] = useState(false);
-  const totalAct = STANDS.reduce((n, s) => n + s.activities.length, 0);
+  const totalAct = stands.reduce((n, s) => n + s.activities.length, 0);
   const doneAct = progress.doneActivities.length;
-  const firstIncomplete = STANDS.find(s => !standDone(progress, s.id)) || STANDS[STANDS.length - 1];
+  const firstIncomplete = stands.find(s => !standDone(progress, s.id)) || stands[stands.length - 1];
 
   // polyline points (in % of the map box)
-  const pts = STANDS.map(s => s.map);
+  const pts = stands.map(s => s.map);
   const poly = pts.map(p => `${p.x},${p.y}`).join(' ');
   // how many segments are "complete" (between consecutive done stands)
-  const doneFlags = STANDS.map(s => standDone(progress, s.id));
+  const doneFlags = stands.map(s => standDone(progress, s.id));
+
+  // Block render until the catalog is loaded so the map never draws against an
+  // empty/undefined stand set.
+  if (catalogLoading) {
+    return (
+      <div className="screen scr-anim">
+        <div className="wrap" style={{ display: 'grid', placeItems: 'center', minHeight: '60vh' }}>
+          <div className="pixel" style={{ fontSize: 11, color: 'var(--cyan)', letterSpacing: 3 }}>
+            {tx(T('CARGANDO MAPA...', 'LOADING MAP...'))}
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="screen scr-anim">
@@ -102,7 +116,7 @@ export function MapScreen({ lang, nav, progress, player }: MapScreenProps) {
                 pathLength="100" />
               <style>{`@keyframes dash{to{stroke-dashoffset:-140}}`}</style>
             </svg>
-            {STANDS.map((s, i) => {
+            {stands.map((s, i) => {
               const done = doneFlags[i];
               const prog = standProgress(progress, s.id);
               const isTarget = firstIncomplete && firstIncomplete.id === s.id;
@@ -211,6 +225,7 @@ interface StandScreenProps { lang: Lang; nav: Nav; standId: string; progress: Pr
 /* ---------------- STAND ---------------- */
 export function StandScreen({ lang, nav, standId, progress, actions, player }: StandScreenProps) {
   const tx = (o: Localized) => o[lang];
+  const { standById } = useGame();
   const st = standById(standId);
   const [celebrate, setCelebrate] = useState<{ piece: PieceId | null | undefined; badges: string[] } | null>(null);
   const [qr, setQr] = useState(false);
@@ -354,6 +369,7 @@ interface AvatarScreenProps { lang: Lang; nav: Nav; progress: Progress; player: 
 /* ---------------- AVATAR COLLECTION ---------------- */
 export function AvatarScreen({ lang, nav, progress, player }: AvatarScreenProps) {
   const tx = (o: Localized) => o[lang];
+  const { stands } = useGame();
   const have = progress.pieces;
   const complete = PIECE_ORDER.every(id => have.includes(id));
   const [popId, setPopId] = useState<PieceId | null>(null);
@@ -385,7 +401,7 @@ export function AvatarScreen({ lang, nav, progress, player }: AvatarScreenProps)
         <div className="grid" style={{ gridTemplateColumns: 'repeat(auto-fill,minmax(140px,1fr))' }}>
           {PIECE_ORDER.map(id => {
             const pc = PIECES[id]; const ok = have.includes(id);
-            const stand = STANDS.find(s => s.piece === id);
+            const stand = stands.find(s => s.piece === id);
             return (
               <Card key={id} flat style={{ padding: 12, borderColor: ok ? pc.color : 'var(--line)', cursor: ok ? 'default' : 'pointer' }}
                 onClick={() => { if (!ok && stand) nav('stand', { standId: stand.id }); }}>

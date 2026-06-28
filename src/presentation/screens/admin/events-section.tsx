@@ -51,7 +51,7 @@ export function EventsSection({ lang }: EventsSectionProps) {
 
   const refresh = useCallback(async () => {
     if (!supabase) {
-      setLoadError(tx(T('Supabase no está configurado.', 'Supabase is not configured.')));
+      setLoadError(T('Supabase no está configurado.', 'Supabase is not configured.')[lang]);
       setLoading(false);
       return;
     }
@@ -65,8 +65,7 @@ export function EventsSection({ lang }: EventsSectionProps) {
     } finally {
       setLoading(false);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [supabase]);
+  }, [supabase, lang]);
 
   useEffect(() => {
     void refresh();
@@ -150,7 +149,7 @@ export function EventsSection({ lang }: EventsSectionProps) {
             {tx(T('Todavía no hay eventos.', 'No events yet.'))}
           </p>
           <p className="t sm" style={{ color: 'var(--ink-3)', marginTop: 6 }}>
-            {tx(T('Creá el primero para empezar.', 'Create the first one to get started.'))}
+            {tx(T('Crea el primero para empezar.', 'Create the first one to get started.'))}
           </p>
         </Card>
       )}

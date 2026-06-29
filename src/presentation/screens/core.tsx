@@ -8,7 +8,7 @@ import { useState, useEffect } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 import { T } from '../../domain/i18n';
 import { PIECES, PIECE_ORDER } from '../../domain/catalog';
-import { standDone, standProgress } from '../../domain/progress';
+import { standDoneOf, standProgressOf } from '../../domain/progress';
 import { Card, Btn, Bar, Modal } from '../components/ui-kit';
 import { PixelSprite } from '../components/sprites';
 import { Avatar, AvatarStage } from '../components/avatar';
@@ -74,13 +74,13 @@ export function MapScreen({ lang, nav, progress, player }: MapScreenProps) {
   const [qr, setQr] = useState(false);
   const totalAct = stands.reduce((n, s) => n + s.activities.length, 0);
   const doneAct = progress.doneActivities.length;
-  const firstIncomplete = stands.find(s => !standDone(progress, s.id)) || stands[stands.length - 1];
+  const firstIncomplete = stands.find(s => !standDoneOf(s, progress)) || stands[stands.length - 1];
 
   // polyline points (in % of the map box)
   const pts = stands.map(s => s.map);
   const poly = pts.map(p => `${p.x},${p.y}`).join(' ');
   // how many segments are "complete" (between consecutive done stands)
-  const doneFlags = stands.map(s => standDone(progress, s.id));
+  const doneFlags = stands.map(s => standDoneOf(s, progress));
 
   // Block render until the catalog is loaded so the map never draws against an
   // empty/undefined stand set.
@@ -141,7 +141,7 @@ export function MapScreen({ lang, nav, progress, player }: MapScreenProps) {
             </svg>
             {stands.map((s, i) => {
               const done = doneFlags[i];
-              const prog = standProgress(progress, s.id);
+              const prog = standProgressOf(s, progress);
               const isTarget = firstIncomplete && firstIncomplete.id === s.id;
               return (
                 <button key={s.id} className="clickable" onClick={() => nav('stand', { standId: s.id })}
@@ -206,7 +206,7 @@ export function StandScreen({ lang, nav, standId, progress, player }: StandScree
 
   const st = standById(standId);
   if (!st) return null; // guard: stand not found
-  const done = standDone(progress, st.id);
+  const done = standDoneOf(st, progress);
 
   return (
     <div className="screen scr-anim">

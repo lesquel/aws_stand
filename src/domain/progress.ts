@@ -32,15 +32,28 @@ export function deriveVisitedStands(doneActivities: string[], stands: Stand[]): 
   return [...visited];
 }
 
-/* a stand is "done" when every one of its activities is completed */
-export function standDone(p: Progress, standId: string): boolean {
-  const st = standById(standId); if (!st) return false;
-  return st.activities.every(a => p.doneActivities.includes(a.id));
+/* a stand is "done" when every one of its activities is completed.
+   Operates on a provided Stand so callers can pass the DB-loaded catalog
+   (RN-03: one activity per stand) instead of the static fallback catalog. */
+export function standDoneOf(stand: Stand, p: Progress): boolean {
+  return stand.activities.every(a => p.doneActivities.includes(a.id));
 }
 
-/* how many of a stand's activities are done, out of the total */
+/* how many of a stand's activities are done, out of the total — for a
+   provided Stand (use the context catalog stand, not the static one). */
+export function standProgressOf(stand: Stand, p: Progress): { done: number; total: number } {
+  const done = stand.activities.filter(a => p.doneActivities.includes(a.id)).length;
+  return { done, total: stand.activities.length };
+}
+
+/* a stand is "done" when every one of its activities is completed (static catalog) */
+export function standDone(p: Progress, standId: string): boolean {
+  const st = standById(standId); if (!st) return false;
+  return standDoneOf(st, p);
+}
+
+/* how many of a stand's activities are done, out of the total (static catalog) */
 export function standProgress(p: Progress, standId: string): { done: number; total: number } {
   const st = standById(standId); if (!st) return { done: 0, total: 0 };
-  const done = st.activities.filter(a => p.doneActivities.includes(a.id)).length;
-  return { done, total: st.activities.length };
+  return standProgressOf(st, p);
 }

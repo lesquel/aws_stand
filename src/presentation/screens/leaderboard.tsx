@@ -98,7 +98,7 @@ export function LeaderboardScreen() {
                         {e.username}
                         {isMe && (
                           <span className="pixel" style={{ fontSize: 7, color: 'var(--yellow)', marginLeft: 8 }}>
-                            {tx(T('VOS', 'YOU'))}
+                            {tx(T('TÚ', 'YOU'))}
                           </span>
                         )}
                       </div>

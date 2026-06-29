@@ -80,16 +80,6 @@ export function playClick(): void {
   tone(440, { type: 'square', dur: 0.06, gain: 0.09, slideTo: 660 });
 }
 
-export function playSuccess(): void {
-  if (!enabled) return;
-  arp([523, 659, 784]); // C5 · E5 · G5
-}
-
-export function playUnlock(): void {
-  if (!enabled) return;
-  arp([523, 659, 784, 1047], { step: 0.07, gain: 0.15 }); // C5 · E5 · G5 · C6
-}
-
 export function playPrize(): void {
   if (!enabled) return;
   arp([659, 784, 988, 1319], { type: 'triangle', step: 0.06, gain: 0.15 }); // E5 · G5 · B5 · E6

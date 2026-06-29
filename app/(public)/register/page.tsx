@@ -9,10 +9,11 @@ export default function RegisterPage() {
   const { lang, nav, player, signUp, authError, confirmPending } = useGame();
   const router = useRouter();
 
-  // If already logged in, redirect to appropriate screen
+  // If already logged in, redirect to the role's home screen.
   useEffect(() => {
     if (player) {
-      router.replace(player.role === 'staff' ? '/staff' : '/home');
+      const dest = player.role === 'admin' ? '/admin' : player.role === 'staff' ? '/staff' : '/home';
+      router.replace(dest);
     }
   }, [player, router]);
 

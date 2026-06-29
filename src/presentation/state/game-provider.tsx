@@ -287,6 +287,48 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [supabase, session]);
 
+  // ── Realtime live-refresh (SP3 polish) ──────────────────────────────────────
+  // After a staff scan credits the player, approve_completion mutates the
+  // player's participations row server-side. Without this, the player's screen
+  // shows stale tickets / badges / pieces / done_activities until a manual
+  // reload. Subscribe to postgres_changes on the player's own row and refetch
+  // the authoritative participation on any change so state reflects the credit
+  // live. RLS scopes delivery to the owner (participations_select_own); the
+  // player_id filter narrows it client-side too. Offline (no Supabase) skips
+  // this entirely. The effect re-subscribes on event change and tears down on
+  // unmount / signOut (session → null), so no channel subscription leaks.
+  useEffect(() => {
+    if (!supabase || !session || !selectedEventId) return;
+    const sb = supabase;
+    const eventId = selectedEventId;
+    const playerId = session.user.id;
+
+    async function refresh() {
+      try {
+        const participation = await fetchParticipation(sb, eventId);
+        if (!participation) return;
+        setProgress({
+          ...participation.progress,
+          visitedStands: deriveVisitedStands(participation.progress.doneActivities, standsRef.current),
+        });
+      } catch (err) {
+        console.warn('[realtime] participation refetch failed:', err);
+      }
+    }
+
+    const channel = sb
+      .channel(`participation:${playerId}:${eventId}`)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'participations', filter: `player_id=eq.${playerId}` },
+        () => { void refresh(); },
+      )
+      .subscribe();
+
+    return () => { void sb.removeChannel(channel); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [supabase, session, selectedEventId]);
+
   // Keep sound engine in sync with tweak
   useEffect(() => { setSoundEnabled(soundOn); }, [soundOn]);
 

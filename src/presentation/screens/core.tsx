@@ -9,11 +9,9 @@ import { QRCodeSVG } from 'qrcode.react';
 import { T } from '../../domain/i18n';
 import { PIECES, PIECE_ORDER } from '../../domain/catalog';
 import { standDone, standProgress } from '../../domain/progress';
-import { badgeById } from '../../domain/badges';
 import { Card, Btn, Bar, Modal } from '../components/ui-kit';
 import { PixelSprite } from '../components/sprites';
 import { Avatar, AvatarStage } from '../components/avatar';
-import { fireConfetti } from '../feedback/confetti';
 import { useGame } from '../state/game-provider';
 import type { Lang, Nav, Progress, Player, Localized, PieceId } from '../../domain/types';
 
@@ -189,10 +187,24 @@ interface StandScreenProps { lang: Lang; nav: Nav; standId: string; progress: Pr
    player's QR affordance — it never awards rewards. */
 export function StandScreen({ lang, nav, standId, progress, player }: StandScreenProps) {
   const tx = (o: Localized) => o[lang];
-  const { standById } = useGame();
-  const st = standById(standId);
+  const { standById, catalogLoading } = useGame();
   const [qr, setQr] = useState(false);
 
+  // Block render until the catalog is loaded so the stand lookup never resolves
+  // against an empty/undefined catalog (mirrors the MapScreen guard).
+  if (catalogLoading) {
+    return (
+      <div className="screen scr-anim">
+        <div className="wrap narrow" style={{ display: 'grid', placeItems: 'center', minHeight: '60vh' }}>
+          <div className="pixel" style={{ fontSize: 11, color: 'var(--cyan)', letterSpacing: 3 }}>
+            {tx(T('CARGANDO...', 'LOADING...'))}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  const st = standById(standId);
   if (!st) return null; // guard: stand not found
   const done = standDone(progress, st.id);
 
@@ -257,44 +269,6 @@ export function StandScreen({ lang, nav, standId, progress, player }: StandScree
 
       {qr && <QrModal lang={lang} player={player} onClose={() => setQr(false)} />}
     </div>
-  );
-}
-
-interface UnlockModalProps { lang: Lang; data: { piece?: PieceId | null; badges: string[] }; onClose: () => void; onAvatar: () => void; }
-/* unlock celebration */
-export function UnlockModal({ lang, data, onClose, onAvatar }: UnlockModalProps) {
-  const tx = (o: Localized) => o[lang];
-  useEffect(() => { fireConfetti({ count: 120 }); }, []);
-  const piece = data.piece ? PIECES[data.piece] : null;
-  return (
-    <Modal onClose={onClose}>
-      <Card corners raise style={{ background: 'var(--bg-2)', textAlign: 'center', padding: 26, borderColor: 'var(--orange)' }}>
-        <div className="eyebrow glow">{tx(T('¡Desbloqueado!', 'Unlocked!'))}</div>
-        {piece && (<>
-          <div className="pop" style={{ display: 'grid', placeItems: 'center', margin: '18px 0 10px' }}>
-            <Card flat style={{ padding: 14, background: 'var(--panel)', borderColor: 'var(--orange)' }}>
-              <PixelSprite layers={[piece.sprite]} scale={6} />
-            </Card>
-          </div>
-          <h2 className="h2">{tx(piece.name)}</h2>
-          <p className="t sm">{tx(T('Pieza añadida a tu avatar', 'Piece added to your avatar'))} · {tx(piece.slot)}</p>
-        </>)}
-        {data.badges && data.badges.map(bid => {
-          const b = badgeById(bid);
-          if (!b) return null;
-          return (
-            <div key={bid} className="row center pop mt14" style={{ justifyContent: 'center', gap: 10, background: 'var(--panel)', padding: 10, border: '2px solid var(--yellow)' }}>
-              <PixelSprite layers={[b.icon]} scale={2.4} />
-              <div className="center-txt"><div className="pixel" style={{ fontSize: 7, color: 'var(--yellow)' }}>{tx(T('NUEVA INSIGNIA', 'NEW BADGE'))}</div><div className="t" style={{ color: 'var(--ink)' }}>{tx(b.name)}</div></div>
-            </div>
-          );
-        })}
-        <div className="row mt20" style={{ gap: 10 }}>
-          <Btn className="f1" variant="ghost" onClick={onClose}>{tx(T('Seguir', 'Keep going'))}</Btn>
-          {piece && <Btn className="f1" onClick={onAvatar}>{tx(T('Ver avatar', 'See avatar'))}</Btn>}
-        </div>
-      </Card>
-    </Modal>
   );
 }
 

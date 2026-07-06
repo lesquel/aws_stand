@@ -278,7 +278,7 @@ export function StaffSection({ lang }: StaffSectionProps) {
                 style={selectStyle}
               >
                 <option value="" disabled>
-                  {tx(T('Elegí un stand', 'Choose a stand'))}
+                  {tx(T('Elige un stand', 'Choose a stand'))}
                 </option>
                 {stands.map((stand) => (
                   <option key={stand.id} value={stand.id}>

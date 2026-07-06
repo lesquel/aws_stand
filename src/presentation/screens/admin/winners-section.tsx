@@ -78,7 +78,7 @@ export function WinnersSection({ lang }: WinnersSectionProps) {
       </h2>
       <p className="t sm" style={{ color: 'var(--ink-3)' }}>
         {tx(T(
-          'Al cierre, escaneá el QR de cada participante para confirmar su identidad y elegibilidad (top 3 y badges completos).',
+          'Al cierre, escanea el QR de cada participante para confirmar su identidad y elegibilidad (top 3 y badges completos).',
           "At close, scan each participant's QR to confirm their identity and eligibility (top 3 and all badges).",
         ))}
       </p>

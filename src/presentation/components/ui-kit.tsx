@@ -4,8 +4,9 @@
    Presentation · UI kit — pixel cards, buttons, bars, stars, modal
    ============================================================ */
 
-import { useRef, useEffect } from 'react';
+import { useRef, useEffect, useState } from 'react';
 import React from 'react';
+import { createPortal } from 'react-dom';
 import { PixelSprite } from './sprites';
 
 interface CardProps {
@@ -101,14 +102,29 @@ interface ModalProps {
   onClose: () => void;
 }
 
-/* modal shell */
+/* modal shell — portaled to document.body.
+ *
+ * Why: every screen wrapper carries the `.scr-anim` intro animation, whose
+ * `animation-fill-mode: both` keeps `transform` resolving to a non-`none`
+ * matrix (the identity matrix) even after the animation completes. Per the
+ * CSS spec, ANY non-`none` computed transform on an ancestor creates a new
+ * containing block for `position: fixed` descendants — so `.modal-bg`'s
+ * `inset: 0` was resolving against that ancestor's box instead of the
+ * viewport, rendering every modal off-screen. Portaling to `document.body`
+ * (which has no such ancestor) sidesteps the containing-block issue
+ * entirely, for this and any future animated ancestor.
+ */
 export function Modal({ children, onClose }: ModalProps) {
-  return (
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => { setMounted(true); }, []);
+  if (!mounted) return null;
+  return createPortal(
     <div className="modal-bg" onClick={onClose}>
       <div className="modal" onClick={e => e.stopPropagation()}>
         {children}
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
 

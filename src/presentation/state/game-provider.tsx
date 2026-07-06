@@ -536,7 +536,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       <div style={{ position: 'fixed', inset: 0, display: 'grid', placeItems: 'center', background: 'var(--bg)', padding: 24 }}>
         <div style={{ width: '100%', maxWidth: 420 }}>
           <div className="pixel" style={{ fontSize: 12, color: 'var(--cyan)', letterSpacing: 2, marginBottom: 16, textAlign: 'center' }}>
-            {tx(T('ELEGÍ UN EVENTO', 'CHOOSE AN EVENT'))}
+            {tx(T('ELIGE UN EVENTO', 'CHOOSE AN EVENT'))}
           </div>
           <div style={{ display: 'grid', gap: 10 }}>
             {activeEvents.map(ev => (

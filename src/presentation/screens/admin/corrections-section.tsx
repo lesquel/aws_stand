@@ -54,7 +54,7 @@ const selectStyle: React.CSSProperties = { ...inputStyle };
 function messageFor(err: unknown, lang: Lang): string {
   const code = (err as { code?: string })?.code;
   if (code === '42501') {
-    return T('No tenés permiso para corregir puntos en este evento.', 'You are not allowed to correct points for this event.')[lang];
+    return T('No tienes permiso para corregir puntos en este evento.', 'You are not allowed to correct points for this event.')[lang];
   }
   if (code === 'P0002') {
     return T('No se encontró un participante con ese QR en este evento.', 'No participant with that QR was found in this event.')[lang];
@@ -159,7 +159,7 @@ export function CorrectionsSection({ lang }: CorrectionsSectionProps) {
     if (!supabase || !lookup) return;
     const parsed = Number(newTotal);
     if (!Number.isInteger(parsed) || parsed < 0) {
-      setFormError(tx(T('Ingresá un total entero de 0 o más.', 'Enter a whole total of 0 or more.')));
+      setFormError(tx(T('Ingresa un total entero de 0 o más.', 'Enter a whole total of 0 or more.')));
       return;
     }
     if (!reason.trim()) {
@@ -252,7 +252,7 @@ export function CorrectionsSection({ lang }: CorrectionsSectionProps) {
                 type="text"
                 value={qrToken}
                 onChange={(e) => setQrToken(e.target.value)}
-                placeholder={tx(T('Pegá el token del QR del jugador', "Paste the player's QR token"))}
+                placeholder={tx(T('Pega el token del QR del jugador', "Paste the player's QR token"))}
                 style={inputStyle}
               />
             </div>

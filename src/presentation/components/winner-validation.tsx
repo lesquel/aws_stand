@@ -37,7 +37,7 @@ const DEDUP_WINDOW_MS = 2500;
 function messageFor(err: unknown, lang: Lang): string {
   const code = (err as { code?: string })?.code;
   if (code === '42501') {
-    return T('No tenés permiso para validar ganadores en este evento.', 'You are not allowed to validate winners for this event.')[lang];
+    return T('No tienes permiso para validar ganadores en este evento.', 'You are not allowed to validate winners for this event.')[lang];
   }
   if (code === 'P0002') {
     return T('No se encontró un participante con ese QR en este evento.', 'No participant with that QR was found in this event.')[lang];
@@ -118,8 +118,8 @@ export function WinnerValidationCard({ lang, eventId }: WinnerValidationCardProp
           <Card flat style={{ padding: 16, borderColor: 'var(--line)' }}>
             <p className="t sm" style={{ color: 'var(--ink-2)' }}>
               {cameraError === 'permission'
-                ? tx(T('Cámara bloqueada. Usá el ingreso manual del código.', 'Camera blocked. Use manual code entry.'))
-                : tx(T('Cámara no disponible. Usá el ingreso manual del código.', 'Camera unavailable. Use manual code entry.'))}
+                ? tx(T('Cámara bloqueada. Usa el ingreso manual del código.', 'Camera blocked. Use manual code entry.'))
+                : tx(T('Cámara no disponible. Usa el ingreso manual del código.', 'Camera unavailable. Use manual code entry.'))}
             </p>
           </Card>
         )}
@@ -149,7 +149,7 @@ export function WinnerValidationCard({ lang, eventId }: WinnerValidationCardProp
             onKeyDown={(e) => {
               if (e.key === 'Enter') submitManual();
             }}
-            placeholder={tx(T('Pegá o escribí el token', 'Paste or type the token'))}
+            placeholder={tx(T('Pega o escribe el token', 'Paste or type the token'))}
             autoCapitalize="off"
             autoCorrect="off"
             spellCheck={false}

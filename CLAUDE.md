@@ -4,7 +4,7 @@ Project-specific guidance for working in this repository.
 
 ## What this is
 
-A gamified event app: **Next.js 14 App Router + TypeScript (strict) + Supabase (Auth + Postgres)**.
+A gamified event app: **Next.js 16 App Router + TypeScript (strict) + Supabase (Auth + Postgres)**.
 Players build an avatar, visit stands, complete activities, collect pieces/badges. Staff validate
 activities at their assigned stand. Architecture is Clean/Hexagonal (domain / application /
 infrastructure / presentation).
@@ -91,7 +91,9 @@ settings (the server-side vars are for tests/tooling, not the deployed runtime).
 - The four original avatar ids (`explorer`, `aqua`, `nova`, `robo`) must never change — they are
   persisted in old saves.
 - Commit with the git-configured identity (Lesquel), conventional commits, no AI attribution.
-- TypeScript strict. Keep `@types/react` pinned to v18 (runtime is react@18.3.1).
+- TypeScript strict. Keep `@types/react`/`@types/react-dom` matching the runtime `react`/`react-dom`
+  major (currently 19.x, via Next 16) — a version-skewed `@types/react` compiles fine but can hide
+  real runtime incompatibilities. Bump types and runtime together, never one without the other.
 - There is no client write-behind to `participations` anymore — the client only reads it (plus a
   live Realtime refetch on change). All gameplay writes go through the RPCs listed above.
 

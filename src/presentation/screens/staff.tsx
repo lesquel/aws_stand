@@ -400,7 +400,7 @@ function WinnerMode({ lang, assignment, onBack, onExit }: WinnerModeProps) {
           <div className="pixel" style={{ fontSize: 8, color: accent }}>{assignment.eventName.toUpperCase()}</div>
           <div className="h2" style={{ marginTop: 6 }}>{tx(T('Validar ganador', 'Validate winner'))}</div>
           <div className="t sm" style={{ color: 'var(--ink-2)', marginTop: 4 }}>
-            {tx(T('Escaneá el QR para ver puesto y badges.', 'Scan the QR to see rank and badges.'))}
+            {tx(T('Escanea el QR para ver puesto y badges.', 'Scan the QR to see rank and badges.'))}
           </div>
         </Card>
 

@@ -276,7 +276,7 @@ interface AvatarScreenProps { lang: Lang; nav: Nav; progress: Progress; player: 
 /* ---------------- AVATAR COLLECTION ---------------- */
 export function AvatarScreen({ lang, nav, progress, player }: AvatarScreenProps) {
   const tx = (o: Localized) => o[lang];
-  const { stands } = useGame();
+  const { stands, catalogLoading } = useGame();
   const have = progress.pieces;
   const complete = PIECE_ORDER.every(id => have.includes(id));
   const [popId, setPopId] = useState<PieceId | null>(null);
@@ -284,6 +284,20 @@ export function AvatarScreen({ lang, nav, progress, player }: AvatarScreenProps)
     const last = progress.lastPiece;
     if (last) { setPopId(last); const timer = setTimeout(() => setPopId(null), 700); return () => clearTimeout(timer); }
   }, [progress.lastPiece]);
+
+  // Block render until the catalog is loaded so piece→stand lookups never run
+  // against an empty/undefined stand set (mirrors MapScreen/StandScreen).
+  if (catalogLoading) {
+    return (
+      <div className="screen scr-anim">
+        <div className="wrap" style={{ display: 'grid', placeItems: 'center', minHeight: '60vh' }}>
+          <div className="pixel" style={{ fontSize: 11, color: 'var(--cyan)', letterSpacing: 3 }}>
+            {tx(T('CARGANDO...', 'LOADING...'))}
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="screen scr-anim">

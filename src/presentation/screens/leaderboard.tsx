@@ -68,14 +68,14 @@ export function LeaderboardScreen() {
 
         {state === 'ready' && entries.length === 0 && (
           <p className="t sm center-txt mt20">
-            {tx(T('Todavía no hay puntajes. ¡Completá actividades para aparecer aquí!', 'No scores yet. Complete activities to show up here!'))}
+            {tx(T('Todavía no hay puntajes. ¡Completa actividades para aparecer aquí!', 'No scores yet. Complete activities to show up here!'))}
           </p>
         )}
 
         {state === 'ready' && entries.length > 0 && (
           <div className="col mt20" style={{ gap: 8 }}>
             {entries.map((e) => {
-              const isMe = !!player && e.username === player.name;
+              const isMe = !!player && e.playerId === player.id;
               return (
                 <Card
                   key={e.playerId}

@@ -131,6 +131,7 @@ export class StandValidationError extends Error {
 }
 
 const UNIQUE_VIOLATION = '23505';
+const FOREIGN_KEY_VIOLATION = '23503';
 const COORD_MIN = 0;
 const COORD_MAX = 100;
 
@@ -228,6 +229,11 @@ function mapStand(row: StandRow): AdminStand {
 function toFriendlyError(error: PostgrestError): Error {
   if (error.code === UNIQUE_VIOLATION) {
     return new StandValidationError('Ya existe un stand con ese identificador (slug) en este evento.');
+  }
+  if (error.code === FOREIGN_KEY_VIOLATION) {
+    return new StandValidationError(
+      'Este stand ya tiene participaciones registradas (jugadores acreditados). Archiva el evento en lugar de eliminar el stand.'
+    );
   }
   return new Error(error.message || 'No se pudo completar la operación.');
 }

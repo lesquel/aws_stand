@@ -15,7 +15,7 @@ export interface Progress {
 }
 export interface Badge { id: string; icon: string; name: Localized; desc: Localized; check: (p: Progress) => boolean; }
 export interface Prize { id: string; sprite: string; name: Localized; cost: number; stock: number; raffle?: boolean; }
-export interface Player { name: string; baseId: string; role?: Role; standId?: string; qrToken?: string; }
+export interface Player { id: string; name: string; baseId: string; role?: Role; standId?: string; qrToken?: string; }
 export interface GameState { player: Player | null; progress: Progress; }
 export type Nav = (screen: string, params?: Record<string, unknown>) => void;
 export interface Actions {

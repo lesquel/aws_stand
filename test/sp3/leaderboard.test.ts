@@ -232,4 +232,19 @@ describe('SP3 event_leaderboard — per-event public ranking', () => {
     expect(error).toBeNull();
     expect((data ?? []) as LeaderboardRow[]).toHaveLength(3);
   });
+
+  it('rejects a truly unauthenticated caller (no session, anon key only) — closes the anon-grant leak', async () => {
+    // event_leaderboard has no internal auth.uid() check — it is filtered
+    // only by the event's status. Before migration 0010 revoked EXECUTE from
+    // `anon` (both the explicit per-function grant AND the PostgreSQL PUBLIC
+    // default grant, which anon inherits), any caller holding just the
+    // public anon key — no login, no session — could read every
+    // participant's username/tickets/badges_count for any active event.
+    const trulyAnon = anonClient(); // never signs in
+    const { data, error } = await trulyAnon.rpc('event_leaderboard', {
+      p_event_id: eventId,
+    });
+    expect(error).not.toBeNull();
+    expect(data).toBeNull();
+  });
 });

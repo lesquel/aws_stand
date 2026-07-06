@@ -59,7 +59,7 @@ localStorage-only mode (no cross-device persistence, no auth).
 **None.** This app does **not** use Supabase Storage.
 
 - Avatars are generated in code (`src/presentation/components/sprites.tsx`), not stored files.
-- All player state lives in the `profiles` table (the `progress` jsonb column), not in object storage.
+- All player state lives in the per-event `participations` table (Postgres), not in object storage.
 - There are no `upload`, `getPublicUrl`, or `createBucket` calls anywhere in the codebase.
 
 You do not need to create a bucket for the app to work today.
@@ -71,24 +71,27 @@ instead of hardcoded. Until that feature exists, the variable is unused and sett
 ## Supabase setup
 
 1. Create a Supabase project.
-2. Open **SQL Editor**, paste the contents of [`supabase/schema.sql`](supabase/schema.sql), and run it.
-   This creates:
-   - the `profiles` table (1:1 with `auth.users`) with RLS (owner-only access);
-   - column-level grants — clients may only write `progress`, `base_id`, `updated_at`;
-   - `become_staff(p_stand_id, p_access_code)` and `change_stand(p_stand_id)` security-definer RPCs;
-   - a signup trigger that auto-creates a profile from auth metadata.
+2. Apply every file in [`supabase/migrations/`](supabase/migrations/) **in order** (`0001` through
+   the highest number), via the Dashboard SQL Editor or `supabase db push`. This creates the full
+   multi-event schema: `events → stands → activities (one per stand) → badges (one per activity)`,
+   `prizes`, `profiles` (identity: unique email, unique `qr_token`), `participations` (per-event
+   progress, no client write grant — mutated only by RPCs), `staff_assignments`,
+   `admin_allowlist`, `completions` (award ledger), `point_corrections` (audit trail), plus the
+   RPCs listed in `CLAUDE.md` (`join_event`, `approve_completion`, `correct_points`, `claim_prize`,
+   `admin_upsert_stand`, `validate_winner`, `event_leaderboard`, `is_admin`).
+   Then run [`supabase/seed.sql`](supabase/seed.sql) to create one default active event so the app
+   isn't empty. **`supabase/schema.sql` is DEPRECATED** — it's the old single-event model; don't
+   apply it.
 3. **Disable email confirmation**: Authentication → Providers → Email → turn off "Confirm email"
    (the signup flow logs the user in immediately).
-4. **Set the staff access code**: edit the hardcoded `'4242'` in the `become_staff` function in
-   `supabase/schema.sql` before each event, then re-run that function block.
-5. Copy the Project URL and `anon` key into `.env.local` (see above).
+4. Copy the Project URL and `anon` key into `.env.local` (see above).
 
 ### Staff roles
 
-- A player becomes staff by calling the `become_staff` RPC with the event access code and a
-  valid stand id (`cloud`, `ia`, `sec`, `crew`, `build`).
-- `role` and `stand_id` are **write-locked** for clients (revoked column grants); they can only
-  change through the security-definer RPCs. Direct column writes are rejected.
+- Staff are **not** self-enrolled. An admin creates a staff account and assigns them to an
+  event + stand (`/admin` → Staff), via a server-only route using the service-role key.
+- `role` is write-locked for clients; a staff member is only ever bound to a stand through
+  `staff_assignments`, which only an admin can write.
 
 ### Admin roles (allowlist bootstrap)
 
@@ -101,13 +104,9 @@ the role is granted at **signup time** from a server-side allowlist:
    `ADMIN_EMAILS` changes.
 3. The allowlisted person **signs up normally** with that email. The `handle_new_user` signup
    trigger sees the email in `admin_allowlist` and creates the profile with `role = 'admin'`.
-4. The app recognizes the admin role and exposes a guarded `/admin` route. The full admin console
-   is SP2; today the route only renders a placeholder for admins and redirects everyone else.
-
-> **Multi-event note:** the schema has moved beyond the original single-event model. Identity now
-> lives in `profiles`, per-event progress in `participations`, and the catalog (events, stands,
-> activities, badges, prizes) is event-scoped. See [`supabase/migrations/`](supabase/migrations/)
-> for the current schema; the legacy single-event `supabase/schema.sql` is retained for reference.
+4. The app recognizes the admin role and redirects to the guarded `/admin` console: Events, Stands
+   (with a visual map editor), Prizes, Staff, Participants, Point corrections, and Winner
+   validation — all backed by real RLS/RPC authorization, not just a client-side redirect.
 
 ## Development
 
@@ -130,13 +129,23 @@ rm -rf .next && npm run build
 ## Project structure (Clean Architecture)
 
 ```
-app/                         Next.js routes (login, register, staff, scanner, ...)
+app/                          Next.js routes (login, register, home, stand/[id], staff, admin,
+                               leaderboard, api/admin/{staff,participants})
 src/
-  domain/                    types, catalog (stands, activities, stand access codes)
-  application/               use cases + ports (approve-activity, ...)
-  infrastructure/            supabase-client, supabase-game-repository, local-storage-...
+  domain/                     types, catalog seed payload + badge rules
+  infrastructure/             supabase-client, supabase-*-repository.ts (catalog, participation,
+                               leaderboard, prize, corrections, winner), supabase-admin-*-server.ts
+                               (server-only, service-role — never imported by client components)
   presentation/
-    state/game-provider.tsx  auth lifecycle, debounced write-behind saves, legacy migration
-    screens/ components/      UI + code-generated avatar sprites
-supabase/schema.sql          DB schema, RLS, column grants, RPCs, signup trigger
+    state/game-provider.tsx   auth lifecycle, async catalog, per-event progress, Realtime refetch
+    screens/                  player screens (map/stand/avatar/leaderboard), staff.tsx (station
+                               console), screens/admin/ (7 sections: events, stands+map, prizes,
+                               staff, participants, corrections, winners)
+    components/               qr-scanner.tsx, winner-validation.tsx (shared admin+staff)
+supabase/
+  migrations/0001-00NN...sql  DB schema, RLS, RPCs, signup trigger — source of truth
+  seed.sql                    default active event bootstrap
+  schema.sql                  DEPRECATED — old single-event model, not applied by anything
+test/sp1/ sp2/ sp3/           integration tests (real Supabase; run per-file — the full suite trips
+                               Supabase's auth rate limit)
 ```

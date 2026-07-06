@@ -57,7 +57,7 @@ async function authHeader(supabase: SupabaseClient): Promise<string> {
   const { data } = await supabase.auth.getSession();
   const token = data.session?.access_token;
   if (!token) {
-    throw new StaffValidationError('No hay una sesión activa. Volvé a iniciar sesión.');
+    throw new StaffValidationError('No hay una sesión activa. Vuelve a iniciar sesión.');
   }
   return `Bearer ${token}`;
 }

@@ -12,7 +12,7 @@
     "seed:admin": "tsx scripts/seed-admin-allowlist.ts"
   },
   "dependencies": {
-    "@supabase/supabase-js": "^2.108.1",
+    "@supabase/supabase-js": "^2.110.0",
     "@zxing/browser": "^0.2.0",
     "@zxing/library": "^0.22.0",
     "next": "^14.2.15",
@@ -22,12 +22,12 @@
     "server-only": "^0.0.1"
   },
   "devDependencies": {
-    "@types/node": "^25.9.1",
-    "@types/react": "^18.3.30",
+    "@types/node": "^25.9.4",
+    "@types/react": "^18.3.31",
     "@types/react-dom": "^18.3.7",
     "dotenv": "^17.4.2",
-    "tsx": "^4.22.4",
+    "tsx": "^4.23.0",
     "typescript": "^6.0.3",
-    "vitest": "^3.2.6"
+    "vitest": "^3.2.7"
   }
 }

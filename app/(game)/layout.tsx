@@ -15,7 +15,7 @@ const tabs = [
 ];
 
 export default function GameLayout({ children }: { children: React.ReactNode }) {
-  const { player, progress, nav, lang } = useGame();
+  const { player, progress, nav, lang, signOut } = useGame();
   const pathname = usePathname();
   const router = useRouter();
   const tx = (o: { es: string; en: string }) => o[lang];
@@ -34,10 +34,17 @@ export default function GameLayout({ children }: { children: React.ReactNode }) 
     <>
       <div className="appbar">
         <div className="brand" style={{ cursor: 'pointer' }} onClick={() => nav('home')}>
-          <PixelSprite layers={['ic_cloud']} scale={1.6} /> CLOUD<b>QUEST</b>
+          <PixelSprite layers={['ic_cloud']} scale={1.6} />
+          <span className="txt-full">CLOUD<b>QUEST</b></span>
         </div>
-        <div className="coin" style={{ fontSize: 11, marginRight: 116 }}>
-          <PixelSprite layers={['ticket']} scale={1.8} /> {progress.tickets}
+        <div className="row center appbar-actions">
+          <div className="coin">
+            <PixelSprite layers={['ticket']} scale={1.8} /> {progress.tickets}
+          </div>
+          <button className="kbtn" onClick={() => void signOut()} aria-label={tx(T('Salir', 'Sign out'))}>
+            <span className="txt-full">{tx(T('Salir', 'Sign out'))}</span>
+            <span className="txt-compact">⏻</span>
+          </button>
         </div>
       </div>
 

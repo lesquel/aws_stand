@@ -175,15 +175,59 @@ img,canvas{ image-rendering:pixelated; image-rendering:crisp-edges; }
 .spread{ display:flex; align-items:center; justify-content:space-between; gap:12px; }
 
 /* ---------- top app bar ---------- */
+/* padding-right is a fixed reservation (not the vw-based clamp used for
+   the other three sides) so the flex content area never extends under
+   the fixed sound/language toggles in chrome-shell.tsx (position:fixed,
+   right:12/76 — combined footprint measured ~112px from the viewport's
+   true right edge, +18px buffer). Because this is real padding (not a
+   margin on the last flex child), `justify-content:space-between` always
+   places content flush against this safe inner edge regardless of
+   viewport width or how much content is on each side — no viewport-
+   dependent arithmetic required. */
 .appbar{
   position:sticky; top:0; z-index:30;
   display:flex; align-items:center; justify-content:space-between;
-  gap:12px; padding:12px clamp(14px,4vw,36px);
+  gap:12px;
+  padding-top:12px; padding-bottom:12px;
+  padding-left:clamp(14px,4vw,36px);
+  padding-right:130px;
   background:rgba(14,19,34,.86); backdrop-filter:blur(4px);
   border-bottom:3px solid var(--line);
 }
 .brand{ display:flex; align-items:center; gap:12px; font-family:var(--fontPixel); font-size:13px; color:var(--ink); }
 .brand b{ color:var(--orange); }
+
+.appbar-actions{ gap:8px; }
+.appbar-actions .coin{ font-size:11px; }
+.appbar-actions .kbtn{ font-size:8px; padding:6px 8px; }
+
+/* Brand wordmark and Salir/Sign out button: full text by default.
+   .txt-compact (Salir's icon fallback) is hidden until the narrow
+   breakpoint below; the brand's .txt-full has no compact counterpart —
+   it just disappears, leaving the clickable cloud icon as a wordless
+   "home" affordance (common mobile pattern once a full wordmark no
+   longer fits). */
+.appbar-actions .kbtn .txt-compact{ display:none; }
+
+@media (max-width:400px){
+  .brand{ font-size:9px; gap:8px; }
+  .appbar-actions{ gap:6px; }
+  .appbar-actions .coin{ font-size:10px; }
+}
+
+/* Below ~380px there isn't reliable room for the full wordmark AND a
+   Salir text label next to the fixed sound/language toggles — collapse
+   both to icons. Verified against live measured rects at 320px AND
+   375px (iPhone SE/6/7/8, a very common width) — the 400px tier alone
+   left only ~5px of clearance at 375px, too thin a margin, so this
+   breakpoint intentionally covers that width too. */
+@media (max-width:380px){
+  .brand .txt-full{ display:none; }
+  .appbar-actions .kbtn .txt-full{ display:none; }
+  .appbar-actions .kbtn .txt-compact{ display:inline; }
+  .appbar-actions .kbtn{ padding:5px 7px; font-size:11px; }
+  .appbar-actions .coin{ font-size:9px; }
+}
 
 /* bottom tabbar (mobile feel) */
 .tabbar{

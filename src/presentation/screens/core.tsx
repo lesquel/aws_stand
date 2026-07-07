@@ -70,7 +70,7 @@ interface MapScreenProps { lang: Lang; nav: Nav; progress: Progress; player: Pla
 /* ---------------- MAP / HOME ---------------- */
 export function MapScreen({ lang, nav, progress, player }: MapScreenProps) {
   const tx = (o: Localized) => o[lang];
-  const { signOut, stands, catalogLoading } = useGame();
+  const { stands, catalogLoading } = useGame();
   const [qr, setQr] = useState(false);
   const totalAct = stands.reduce((n, s) => n + s.activities.length, 0);
   const doneAct = progress.doneActivities.length;
@@ -108,14 +108,9 @@ export function MapScreen({ lang, nav, progress, player }: MapScreenProps) {
               <div className="pixel" style={{ fontSize: 13, color: 'var(--ink)' }}>{(player.name || 'PLAYER').toUpperCase()}</div>
             </div>
           </div>
-          <div className="row center" style={{ gap: 8 }}>
-            <button className="clickable coin" onClick={() => nav('prizes')} style={{ background: 'var(--panel-2)', border: '2px solid var(--line)', padding: '8px 12px', cursor: 'pointer' }}>
-              <PixelSprite layers={['ticket']} scale={2} /> {progress.tickets}
-            </button>
-            <button className="kbtn" onClick={() => signOut()} style={{ fontSize: 8, padding: '6px 8px' }}>
-              {tx(T('Salir', 'Log out'))}
-            </button>
-          </div>
+          <button className="clickable coin" onClick={() => nav('prizes')} style={{ background: 'var(--panel-2)', border: '2px solid var(--line)', padding: '8px 12px', cursor: 'pointer' }}>
+            <PixelSprite layers={['ticket']} scale={2} /> {progress.tickets}
+          </button>
         </div>
 
         {/* overall progress */}

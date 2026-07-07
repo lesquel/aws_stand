@@ -21,6 +21,7 @@ import { PixelSprite } from '../components/sprites';
 import { QrScanner, type QrCameraError } from '../components/qr-scanner';
 import { WinnerValidationCard } from '../components/winner-validation';
 import { showToast } from '../feedback/toast';
+import { useGame } from '../state/game-provider';
 import type { Lang, Nav, Localized } from '../../domain/types';
 import type { StaffAssignment, ApproveResult } from '../../infrastructure/supabase-staff-repository';
 
@@ -33,6 +34,7 @@ interface StaffScreenProps {
 
 export function StaffScreen({ lang, nav, getStaffAssignments, approveCompletion }: StaffScreenProps) {
   const tx = (o: Localized) => o[lang];
+  const { signOut } = useGame();
 
   const [assignments, setAssignments] = useState<StaffAssignment[] | null>(null);
   const [loadError, setLoadError] = useState(false);
@@ -102,7 +104,10 @@ export function StaffScreen({ lang, nav, getStaffAssignments, approveCompletion 
     return (
       <div className="screen scr-anim">
         <div className="wrap narrow" style={{ paddingTop: 30 }}>
-          <button className="kbtn" onClick={() => nav('landing')}>← {tx(T('Volver', 'Back'))}</button>
+          <div className="spread">
+            <button className="kbtn" onClick={() => nav('landing')}>← {tx(T('Volver', 'Back'))}</button>
+            <button className="kbtn" onClick={() => void signOut()}>{tx(T('Salir', 'Sign out'))}</button>
+          </div>
           <div className="eyebrow mt10" style={{ color: 'var(--cyan)' }}>{tx(T('MODO STAFF', 'STAFF MODE'))}</div>
           <h2 className="h1" style={{ marginTop: 8 }}>{tx(T('Sin asignación', 'No assignment'))}</h2>
           <Card flat className="mt20" style={{ padding: 16, borderColor: 'var(--line)' }}>
@@ -121,7 +126,10 @@ export function StaffScreen({ lang, nav, getStaffAssignments, approveCompletion 
   return (
     <div className="screen scr-anim">
       <div className="wrap narrow" style={{ paddingTop: 30 }}>
-        <button className="kbtn" onClick={() => nav('landing')}>← {tx(T('Volver', 'Back'))}</button>
+        <div className="spread">
+          <button className="kbtn" onClick={() => nav('landing')}>← {tx(T('Volver', 'Back'))}</button>
+          <button className="kbtn" onClick={() => void signOut()}>{tx(T('Salir', 'Sign out'))}</button>
+        </div>
         <div className="eyebrow mt10" style={{ color: 'var(--cyan)' }}>{tx(T('MODO STAFF', 'STAFF MODE'))}</div>
         <h2 className="h1" style={{ marginTop: 8 }}>{tx(T('Elige tu estación', 'Pick your station'))}</h2>
 

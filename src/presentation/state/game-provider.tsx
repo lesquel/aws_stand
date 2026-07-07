@@ -54,7 +54,6 @@ const SCREEN_PATHS: Record<string, string> = {
   prizes: '/prizes',
   leaderboard: '/leaderboard',
   staff: '/staff',
-  dashboard: '/dashboard',
 };
 
 // ── Context shape ─────────────────────────────────────────────────────────────

@@ -33,9 +33,6 @@ export function Landing({ lang, nav, layout = 'center' }: LandingProps) {
         <Btn variant="" size="lg" onClick={() => nav('login')}>▶ {tx(T('Comenzar', 'Start'))}</Btn>
         <Btn variant="ghost" size="lg" onClick={() => nav('staff')}>{tx(T('Soy staff', 'I am staff'))}</Btn>
       </div>
-      <button className="kbtn" style={{ marginTop: 14 }} onClick={() => nav('dashboard')}>
-        ⚙ {tx(T('Panel del organizador', 'Organizer panel'))} →
-      </button>
     </div>
   );
 
